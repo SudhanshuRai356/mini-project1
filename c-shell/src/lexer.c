@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "lexer.h"
-void lexer(char* cmd,token *args,int *len1) {
+int lexer(char* cmd,token *args,int *len1) {
     int len = strlen(cmd);
     int args_index = 0;
     for(int i=0;i<len;i++){
@@ -15,6 +15,10 @@ void lexer(char* cmd,token *args,int *len1) {
         args[args_index].value = malloc(100 * sizeof(char));
         if(cmd[i]=='\\'){ //escape
             i++;
+            if(i>=len){
+                printf("cshell: invalid syntax\n");
+                return -1;
+            }
             args[args_index].value[0] = cmd[i];
             args[args_index].value[1] = '\0';
             args[args_index].type = 2;
@@ -71,6 +75,10 @@ void lexer(char* cmd,token *args,int *len1) {
                 }
                 args[args_index].value[k++]=cmd[i++];
             }
+            if(cmd[i]!='"'){
+                printf("cshell: invalid syntax\n");
+                return -1;
+            }
             args[args_index].value[k]='\0';
             args[args_index].type = 1;
             args_index++; 
@@ -85,6 +93,10 @@ void lexer(char* cmd,token *args,int *len1) {
                 }
                 args[args_index].value[k++]=cmd[i++];
             }
+            if(cmd[i]!='\''){
+                printf("cshell: invalid syntax\n");
+                return -1;
+            }
             args[args_index].value[k]='\0';
             args[args_index].type = 1;
             args_index++;
@@ -95,6 +107,14 @@ void lexer(char* cmd,token *args,int *len1) {
                 if(cmd[i]==' ' || cmd[i]=='\t' || cmd[i]=='\n' || cmd[i]=='\r' || cmd[i]=='|' || cmd[i]=='&' || cmd[i]=='<' || cmd[i]=='>' || cmd[i]==';'){
                     break;
                 }
+                if(cmd[i]=='\\'){ //escape
+                    i++;
+                    if(i>=len){
+                        printf("cshell: invalid syntax\n");
+                        return -1;
+                    }
+                    continue;
+                }
                 args[args_index].value[k++]=cmd[i++];
             }
             args[args_index].value[k]='\0';
@@ -104,4 +124,5 @@ void lexer(char* cmd,token *args,int *len1) {
         }
     }
     *len1=args_index;
+    return 0;
 }

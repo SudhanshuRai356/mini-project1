@@ -4,7 +4,7 @@
 #include<stdlib.h>
 #include<unistd.h>
 #include "lexer.h"
-//#include "parser.h"
+#include "parser.h"
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
@@ -43,9 +43,24 @@ void process_cmd(char* cmd){
     token *args;
     args=malloc(100*sizeof(token));
     int len=0;
-    lexer(cmd,args,&len);
-    for (int i=0;i<len;i++){
-        printf("%s %d\n",args[i].value,args[i].type);
+    if(lexer(cmd,args,&len)==-1){
+        printf("cshell: invalid syntax\n");
+        return;
+    }
+    // for (int i=0;i<len;i++){
+    //     printf("%s %d\n",args[i].value,args[i].type); //lex token stream test
+    // }
+    node **coms;
+    coms=malloc(100*sizeof(node*));
+    int len1=0;
+    int ret=parser(args,len,coms,&len1);
+    if(ret==-1){
+        printf("cshell: invalid syntax\n");
+        return;
+    }
+    else if(ret==0){
+        printf("success\n");
+        return;
     }
 }
 int main(){
