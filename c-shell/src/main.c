@@ -3,6 +3,8 @@
 #include<string.h>
 #include<stdlib.h>
 #include<unistd.h>
+#include "lexer.h"
+#include "parser.h"
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
@@ -38,10 +40,15 @@ char* getpwd(){
     return pwd;
 }
 void process_cmd(char* cmd){
-    char* args[100];
-    lexer(cmd,args);
-    parse(args);
-    
+    char* special[100];
+    char *quoted[100];
+    char *escaped[100];
+    char *ordinary[100];
+    char *args[500];
+    char* postfix[500];
+    int len=0;
+    lexer(cmd,special,quoted,escaped,ordinary,args,&len);
+    parser(special,quoted,escaped,ordinary,args,postfix,len);
 }
 int main(){
     init_shell();
