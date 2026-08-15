@@ -16,7 +16,8 @@ TGT   ->  WORD ARG
 
 BG    ->  ε
       |   WORD ARG
-ok that  worked  above is the grammar how am i supposed to make a parser, since its rlg the parse tree is actually a parse linked list or i want  to just make it an array or something```
+ok that  worked  above is the grammar how am i supposed to make a parser, since its rlg the parse tree is actually a parse linked list or i want  to just make it an array or something
+```
 
 ![alt text](image.png)
 ![alt text](image-1.png)
