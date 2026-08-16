@@ -5,12 +5,15 @@
 #include<unistd.h>
 #include "lexer.h"
 #include "parser.h"
+#include "bins.h"
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
 // #endif
 char* pwd;
 char* home;
+char* user;
+char* host;
 void str_replace(char* old,char* sstr,char* new){
     char*pos;
     pos=strstr(old,sstr);
@@ -31,6 +34,10 @@ void str_replace(char* old,char* sstr,char* new){
 void init_shell(){
     pwd=malloc(PATH_MAX * sizeof(char));
     getcwd(pwd,PATH_MAX);
+    user=malloc(100 * sizeof(char));
+    host=malloc(100 * sizeof(char));
+    getlogin_r(user, 100);
+    gethostname(host, 100);
     home=&pwd[0];
 }
 char* getpwd(){
@@ -58,20 +65,82 @@ void process_cmd(char* cmd){
         printf("cshell: invalid syntax\n");
         return;
     }
-    else if(ret==0){
-        printf("success\n");
-        return;
+    for(int i=0;i<len1;i++){
+        for(int j=0;j<coms[i]->arg_index;j++){
+            if(coms[i]->args[j][0]=='~'){
+                str_replace(coms[i]->args[j],"~",home);
+            }
+        }
+        if(strcmp(coms[i]->cmd,"hop")==0)
+        {
+            // Handle hop command
+        }
+        else if(strcmp(coms[i]->cmd,"reveal")==0)
+        {
+            char* res=calloc(10000,sizeof(char));
+            if (coms[i]->args[1] == NULL) {
+                coms[i]->args[1] = ".";
+                coms[i]->arg_index++;
+                reveal(coms[i]->args, 2, res);
+                printf("%s", res);
+                if(res[strlen(res)-1]!='\n'){
+                    printf("\n");
+                }
+                free(res);
+                continue;
+            }
+            int j;
+            for(j=1;j<coms[i]->arg_index;j++){
+                if(coms[i]->args[j][0]=='-'){
+                    continue;
+                }
+            }
+            if(j+1<coms[i]->arg_index){
+                printf("reveal: invalid syntax\n");
+                free(res);
+                return;
+            }
+            else{
+                reveal(coms[i]->args, coms[i]->arg_index, res);
+                printf("%s", res);
+                if(res[strlen(res)-1]!='\n'){
+                    printf("\n");
+                }
+                free(res);
+            }
+        }
+        else if(strcmp(coms[i]->cmd,"peek")==0)
+        {
+            // Handle peek command
+        }
+        else if(strcmp(coms[i]->cmd,"locate")==0)
+        {
+            // Handle locate command
+        }
+        else if(coms[i]->cmd==NULL){
+            continue;
+        }
+        else{
+            printf("cshell: command not found: %s\n",coms[i]->cmd);
+        }
     }
 }
 int main(){
     init_shell();
     while(1){
         getpwd();
-        printf("<shura@iiit:%s>",pwd);
+        printf("<%s@%s:%s>",user,host,pwd);
         char* cmd;
         cmd=malloc(999*sizeof(char));
-        scanf("%[^\n]s",cmd); //read the command as the whole line breaaking  att new line char thats why this retarded scanf
-        scanf("%*c"); //to eat the \n  from the previous scanf
+        // scanf("%[^\n]s",cmd); //read the command as the whole line breaaking  att new line char thats why this retarded scanf
+        // scanf("%*c"); //to eat the \n  from the previous scanf
+        fgets(cmd,999,stdin); // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
+        cmd[strcspn(cmd, "\n")] = 0; // remove the trailing newline character
+        if(strlen(cmd)==0){
+            free(cmd);
+            continue;
+        }
         process_cmd(cmd);
+        free(cmd);
     }
 }
