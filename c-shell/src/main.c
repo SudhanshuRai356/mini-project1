@@ -115,7 +115,22 @@ void process_cmd(char* cmd){
         }
         else if(strcmp(coms[i]->cmd,"locate")==0)
         {
-            // Handle locate command
+            if(coms[i]->arg_index<2){
+                printf("locate: invalid syntax\n");
+                continue;
+            }
+            int k=0;
+            char* new_args[100];
+            int j=1;
+            while(j<coms[i]->arg_index&&coms[i]->args[j][0]!='-'){
+                new_args[k++]=coms[i]->args[j];
+                j++;
+            }
+            new_args[k]=NULL;
+            char* res=calloc(10000,sizeof(char));
+            locate(new_args,res,k);
+            printf("%s", res);
+            free(res);
         }
         else if(coms[i]->cmd==NULL){
             continue;

@@ -55,7 +55,7 @@ void reveal(char **args,int len,char* res){
             bool dir=false;
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
-            if(recurse){
+            if(recurse || hidden){
                 strcat(res,path);
                 if(dir)
                 strcat(res,"/");
@@ -137,7 +137,7 @@ void reveal(char **args,int len,char* res){
             bool dir=false;
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
-            if(recurse){
+            if(recurse || hidden){
                 strcat(res,path);
                 if(dir)
                 strcat(res,"/");
@@ -165,5 +165,51 @@ void reveal(char **args,int len,char* res){
             free(list[k]);
         }
         free(list);
+    }
+}
+void locate(char** filename,char* res,int k){
+    char* args[3];
+    char *mid;
+    for(int i=0;i<k;i++){
+        mid=calloc(10000,sizeof(char));
+        args[0]="reveal";
+        args[1]="-t";
+        args[2]=".";
+        reveal(args,2,mid);
+        char *pos =strstr(mid,filename[i]);
+        if((pos)!=NULL){
+            int j=0;
+            while(*(pos-j)!='\0'&& *(pos-j)!='\n'&& *(pos-j)!=' '){
+                j++;
+            }
+            if (pos-j==NULL){
+                strcat(res,"locate: command not found (");
+                strcat(res,filename[i]);
+                strcat(res,")\n");
+            }
+            else
+            strcat(res,*(pos-j+1));
+        }
+        free(mid);
+        mid=calloc(10000,sizeof(char));
+        args[0]="reveal";
+        args[1]="-t";
+        args[2]="/";
+        reveal(args,2,mid);
+        pos =strstr(mid,filename[i]);
+        if((pos)!=NULL){
+            int j=0;
+            while(*(pos-j)!='\0'&& *(pos-j)!='\n'&& *(pos-j)!=' '){
+                j++;
+            }
+            if (pos-j==NULL){
+                strcat(res,"locate: command not found (");
+                strcat(res,filename[i]);
+                strcat(res,")\n");
+            }
+            else
+            strcat(res,*(pos-j+1));
+        }
+        free(mid);
     }
 }
