@@ -413,3 +413,19 @@ i am getting an OOM in my implementation of a find like program in my cshell imp
 ![alt text](image-4.png)
 ![alt text](image-5.png)
 ![alt text](image-6.png)
+
+### Prompt 3
+```
+ok so similarly i need to put a function callled peek into my bins which has to “n”: counts the number of non-empty lines in the input. The line number 
+must be printed before the corresponding line.
+“r”: print the contents of the input in reverse line order. For seekable
+ input (regular files), use lseek to read the file backwards in 
+fixed-size chunks rather than loading it all into memory at once. For 
+non-seekable input (pipes, standard input), buffering the full input 
+before reversing is allowed., explain don't give me the whole code, boiler plate is fine
+```
+
+![alt text](image-7.png)
+![alt text](image-8.png)
+![alt text](image-9.png)
+![alt text](image-10.png)

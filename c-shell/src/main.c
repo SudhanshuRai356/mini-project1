@@ -14,6 +14,10 @@ char* pwd;
 char* home;
 char* user;
 char* host;
+char* prevdir(){
+    //to be implemented with hop
+    return NULL;
+}
 void str_replace(char* old,char* sstr,char* new){
     char*pos;
     pos=strstr(old,sstr);
@@ -111,7 +115,33 @@ void process_cmd(char* cmd){
         }
         else if(strcmp(coms[i]->cmd,"peek")==0)
         {
-            // Handle peek command
+            if(coms[i]->arg_index<2){
+                coms[i]->args[1]="-";
+                coms[i]->arg_index++;
+            }
+            int j=1;
+            while(j<coms[i]->arg_index && coms[i]->args[j][0]=='-'){
+                if(strcmp(coms[i]->args[j],"-")==0)
+                break;
+                j++;
+            }
+            if(j==coms[i]->arg_index){
+                coms[i]->args[j]="-";
+                coms[i]->arg_index++;
+                j++;
+            }
+            while(j<coms[i]->arg_index){
+                if(coms[i]->args[j][0]=='-'){
+                    if(strcmp(coms[i]->args[j],"-")==0){
+                        j++;
+                        continue;
+                    }
+                    printf("peek: invalid syntax\n");
+                    return;
+                }
+                j++;
+            }
+            peek(coms[i]->args, coms[i]->arg_index);
         }
         else if(strcmp(coms[i]->cmd,"locate")==0)
         {

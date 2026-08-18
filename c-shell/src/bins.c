@@ -6,6 +6,7 @@
 #include<sys/stat.h> //stackoverflow recommended swap for d_type
 #include<stdbool.h>
 #include <limits.h>
+#include<fcntl.h>
 #include "bins.h"
 void hop(char**args,int len){
     //hoga kuch need a blocker cleared
@@ -169,12 +170,15 @@ void reveal(char **args,int len,char* res){
 }
 void locate(char** filename,char* res,int k){// i did  not expect to get punched with an OOM today, also reading the most recent doubt i realised i might have some reading comprehension issues and asked AI for help here as well gonna overhaul the full implemenatation     
     char *paths=getenv("PATH");
+    char* cwd;
+    cwd=calloc(PATH_MAX,sizeof(char)); //i truly need to start reading the quuestions 
+    getcwd(cwd,PATH_MAX);
     if(paths==NULL){
         printf("cshell: PATH environment variable not set\n");
         return;
     }
-    char*temp=calloc(strlen(paths)+3,sizeof(char));
-    snprintf(temp,strlen(paths)+3,"%s:.",paths);
+    char*temp=calloc(strlen(paths)+2+strlen(cwd),sizeof(char));
+    snprintf(temp,strlen(paths)+2+strlen(cwd),"%s:%s",cwd,paths);
     for(int i=0;i<k;i++){
         bool exist=false;
         char* pointer=temp;
@@ -214,4 +218,181 @@ void locate(char** filename,char* res,int k){// i did  not expect to get punched
         }
     }
     free(temp);
+}
+void peek(char**args,int len){
+    int i=1;
+    bool rev=false;
+    bool num=false;
+    while(i<len && args[i][0]=='-'){
+        size_t j=1;
+        while(j<strlen(args[i])){
+            if(args[i][j]=='r'){
+                rev=true;
+            }
+            else if(args[i][j]=='n'){
+                num=true;
+            }
+            else{
+                printf("peek: invalid option %c\n",args[i][j]);
+                return;
+            }
+            j++;
+        }
+        i++;
+    }
+    if(i==len){
+        if(strcmp(args[i-1],"-")!=0){
+        printf("peek: invalid syntax\n");
+        return;   
+        }
+        i--;
+    }
+    if(!rev){
+        while(i<len){
+            int k=0;
+            FILE *file;
+            if(strcmp(args[i],"-")==0){
+                file=stdin; //since this is what the question asks for
+            }
+            else{    
+                struct stat is_dir;
+                if(stat(args[i], &is_dir) == 0 && S_ISDIR(is_dir.st_mode)){
+                    printf("peek: is a directory\n");
+                    i++;
+                    continue;
+                }
+                file=fopen(args[i],"r");
+                if(file==NULL){
+                    printf("peek: no such file or directory\n");
+                    i++;
+                    continue;
+                }
+            }
+            char *line=NULL; //posix read file boiler plate
+            size_t length=0;
+            ssize_t read;
+            read=getline(&line,&length,file);
+            while(read!=-1){
+                if(strcmp(line,"\n")==0){ //doubted currently maybe it should not run at all or it should yell then continue currently have the yell then continue setup made
+                    printf("\n");
+                }
+                else{
+                    if(read>0 && line[read-1]=='\n'){
+                        line[read-1]='\0';
+                    }
+                    if(num)
+                    printf("%d %s\n",++k,line);
+                    else
+                    printf("%s\n",line);
+                }
+                read=getline(&line,&length,file);
+            }
+            free(line);
+            if(file!=stdin)
+            fclose(file);
+            i++;
+        }
+    }
+    else{
+        while(i<len){
+            int k=0;
+            struct stat is_dir;
+            if(stat(args[i], &is_dir) == 0 && S_ISDIR(is_dir.st_mode)){ //directory check is first since opening a directory also gives null, then the errors output don't need to have one saying not file or dir idk
+                printf("peek: is a directory\n");
+                i++;
+                continue;;
+            }
+            // FILE *file=fopen(args[i],"r");
+            int fd=open(args[i],O_RDONLY);//lseek uses the direct file descriptor and not the file itself
+            if(fd<0){
+                printf("peek: no such file or directory\n"); //this is changed boiler plate to handle the case of continue with a shout out
+                i++;
+                continue;
+            }
+            off_t size=lseek(fd,0,SEEK_END); //lseek returns the offset of the file descriptor and SEEK_END is a macro to seek to the end of the file
+            if(size==0){
+                close(fd);
+                i++;
+                continue;
+            }
+            if(num){// hey i can either go through the whole thing in reverse find value of k then do k-- or i can just copy paste from above and change 2 lines guess what i did
+                FILE *file=fopen(args[i],"r");
+                char *line=NULL;
+                size_t length=0;
+                ssize_t read;
+                read=getline(&line,&length,file);
+                while(read!=-1){
+                    if((strcmp(line,"\n")!=0)&&strlen(line)>0)
+                    k++;
+                    read=getline(&line,&length,file);
+                }
+                free(line);
+                fclose(file);
+            }
+            off_t pos=size;
+            int chunk=2048;
+            char *rest=NULL;
+            int numrest=0;
+            while(pos>0){
+                int reade;
+                if(pos>chunk)
+                reade=chunk;
+                else
+                reade=(int)pos;
+                pos-=reade;
+                lseek(fd,pos,SEEK_SET);
+                char *buffer=malloc(reade+1+numrest);
+                read(fd,buffer,reade);
+                if(numrest>0){// this is essentially copying back something left in last slice since we read chunk by chunk in lseek like the final x in one chunk like that
+                    memcpy(buffer+reade,rest,numrest);
+                    free(rest);
+                }
+                buffer[reade+numrest]='\0';
+                int prev=reade+numrest-1;
+                if(pos+reade==size && buffer[prev]=='\n'){
+                    prev--;
+                }
+                for(int j=prev;j>=0;j--){ //adjusting for the question
+                    if(buffer[j]=='\n'){
+                        int str=prev-j;
+                        char *line=malloc(str+1);
+                        strncpy(line,buffer+j+1,str);
+                        line[str]='\0';
+                        if(str==0)
+                        printf("\n");
+                        else{
+                            if(num)
+                            printf("%d %s\n",k--,line);
+                            else
+                            printf("%s\n",line);
+                        }
+                        free(line);
+                        prev=j-1;
+                    }
+                }
+                numrest=prev+1;
+                if(numrest>0){
+                    rest=malloc(numrest);
+                    memcpy(rest,buffer,numrest);
+                }
+                else{
+                    rest=NULL;
+                }
+                free(buffer);
+            }
+            if(numrest>0){
+                char*line=malloc(numrest+1);
+                strncpy(line,rest,numrest);
+                line[numrest]='\0';
+                if(num)
+                printf("%d %s\n",k--,line);
+                else
+                printf("%s\n",line);
+                free(line);
+                free(rest);
+            }
+            close(fd);
+            i++;
+        }
+    }
 }
