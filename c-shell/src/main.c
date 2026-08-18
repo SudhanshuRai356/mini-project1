@@ -6,6 +6,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "bins.h"
+#include<stdbool.h>
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
@@ -14,9 +15,10 @@ char* pwd;
 char* home;
 char* user;
 char* host;
-char* prevdir(){
-    //to be implemented with hop
-    return NULL;
+char* prev;
+void prevdir(){
+    prev=calloc(PATH_MAX,sizeof(char)); //just initialsing prev and will do this once could have been in init shell but oh well
+    return;
 }
 void str_replace(char* old,char* sstr,char* new){
     char*pos;
@@ -77,7 +79,11 @@ void process_cmd(char* cmd){
         }
         if(strcmp(coms[i]->cmd,"hop")==0)
         {
-            // Handle hop command
+            bool changed=false;
+            char* ccwd=calloc(PATH_MAX,sizeof(char));
+            char* cwd=malloc(PATH_MAX * sizeof(char));
+            getcwd(cwd,PATH_MAX);
+            hop(coms[i]->args,coms[i]->arg_index,&changed,ccwd,prev,home);
         }
         else if(strcmp(coms[i]->cmd,"reveal")==0)
         {
@@ -93,16 +99,30 @@ void process_cmd(char* cmd){
                 free(res);
                 continue;
             }
-            int j;
-            for(j=1;j<coms[i]->arg_index;j++){
-                if(coms[i]->args[j][0]=='-'){
-                    continue;
+            int j=1;
+            bool preverr=false;
+            while(j<coms[i]->arg_index && coms[i]->args[j][0]=='-'){
+                if(strcmp(coms[i]->args[j],"-")==0){
+                    if(strcmp(prev,"")==0){
+                        printf("reveal: no such directory\n");
+                        free(res);
+                        preverr=true;
+                        continue;
+                    }
+                    strcpy(coms[i]->args[j],prev);
+                    j++;
+                    break;
                 }
+                j++;
             }
+            if(preverr){
+                continue;
+            }
+            
             if(j+1<coms[i]->arg_index){
                 printf("reveal: invalid syntax\n");
                 free(res);
-                return;
+                continue;
             }
             else{
                 reveal(coms[i]->args, coms[i]->arg_index, res);
@@ -172,6 +192,7 @@ void process_cmd(char* cmd){
 }
 int main(){
     init_shell();
+    prevdir();
     while(1){
         getpwd();
         printf("<%s@%s:%s>",user,host,pwd);

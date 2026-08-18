@@ -7,9 +7,160 @@
 #include<stdbool.h>
 #include <limits.h>
 #include<fcntl.h>
+#include<float.h>
+#include<time.h>
 #include "bins.h"
-void hop(char**args,int len){
-    //hoga kuch need a blocker cleared
+char *list;
+bool search(char*home,char*path,char*match){
+    char filepath[PATH_MAX];
+    snprintf(filepath,PATH_MAX,"%s/frerency",home);
+    FILE *file=fopen(filepath,"r");
+    if(file==NULL){
+        return false;
+    }
+    float max_rank=-1.0;
+    char line[PATH_MAX+100];
+    bool matched=false;
+    time_t ct=time(NULL);
+    while(fgets(line,sizeof(line),file)){
+        element el;
+        if(sscanf(line,"{p:\"%[^\"]\",s:\"%d\",t:\"%ld\"}",el.path,&el.score,&el.stamp)==3){
+            if(strstr(el.path,path)!=NULL){
+                struct stat st;
+                if(stat(el.path,&st)==0&&S_ISDIR(st.st_mode)){
+                    double units_old=difftime(ct,el.stamp)/12813.0; //3 hours 33 min 33 sec, give me choice get weird results
+                    double rank=(double)el.score/((units_old/11)+1);//yeah so instead of storing my rank i am storing score and time so that whenever it comes in we can check rank for that time hence the decay is real
+                    if(rank>max_rank){
+                        max_rank=rank;
+                        strcpy(match,el.path);
+                        matched=true;
+                    }
+                }
+            }
+        } 
+    }
+    fclose(file);
+    return matched;
+}
+void update(char* path,char*home){
+    char filepath[PATH_MAX];
+    snprintf(filepath,PATH_MAX,"%s/frerency",home);
+    element eldb[100];
+    int count=0;
+    double min_rank=DBL_MAX;
+    int min=0;
+    time_t ct=time(NULL);
+    FILE *file=fopen(filepath,"r");
+    if(file!=NULL){
+        char line[PATH_MAX+100];
+        while(fgets(line,sizeof(line),file)&&count<100){
+            if(sscanf(line,"{p:\"%[^\"]\",s:\"%d\",t:\"%ld\"}",eldb[count].path,&eldb[count].score,&eldb[count].stamp)==3){
+                double units_old=difftime(ct,eldb[count].stamp)/12813.0;
+                double rank=(double)eldb[count].score/((units_old)/11)+1;
+                if(rank<min_rank){
+                    min_rank=rank;
+                    min=count;
+                }
+                count++;
+            }
+        }
+        fclose(file);
+    }
+    int found=-1;
+    for(int i=0;i<count;i++){
+        if(strcmp(eldb[i].path,path)==0){
+            found=i;
+            break;
+        }
+    }
+    if(found!=-1){
+        eldb[found].score+=1;//freqquency update
+        eldb[found].stamp=ct;//recency update
+    }
+    else if(count<100){
+        strcpy(eldb[count].path,path);
+        eldb[count].score=1;
+        eldb[count].stamp=ct;
+        count++;
+    }
+    else{
+        strcpy(eldb[min].path,path);
+        eldb[min].score=1;
+        eldb[min].stamp=ct;
+    }
+    file=fopen(filepath,"w");
+    if(file){
+        for(int i=0;i<count;i++){
+            fprintf(file,"{p:\"%s\",s:\"%d\",t:\"%ld\"}\n",eldb[i].path,eldb[i].score,(long)eldb[i].stamp);
+        }
+        fclose(file);
+    }
+}
+void hop(char**args,int len,bool *changed,char* cwd,char* prev,char* home){
+    if(len==1){
+        char* temp=malloc(PATH_MAX*sizeof(char));
+        getcwd(temp,PATH_MAX);
+        chdir(home);
+        *changed=true;
+        if(strcmp(prev,temp)!=0)
+        strcpy(prev,temp);
+        update(home,home);
+        free(temp);
+        return;
+    }
+    for(int i=1;i<len;i++){
+        char *ccwd;
+        ccwd=calloc(PATH_MAX,sizeof(char));
+        getcwd(ccwd,PATH_MAX);
+        char*tar;
+        tar=calloc(PATH_MAX,sizeof(char));
+        bool hopped=false;
+        struct stat path;
+        if(strcmp(args[i],"~")==0){
+            strcpy(tar,home);
+            hopped=true;
+        }
+        else if(strcmp(args[i],"-")==0){
+            if(strcmp(prev,"")==0){
+                continue;
+            }
+            strcpy(tar,prev);
+            hopped=true;
+        }
+        else if(strcmp(args[i],".")==0){
+            continue;
+        }
+        else if(strcmp(args[i],"..")==0){
+            if(strcmp(ccwd,"/")==0)
+            continue;
+            strcpy(tar,"..");
+            hopped=true;
+        }
+        else{
+            if(stat(args[i], &path)==0 && S_ISDIR(path.st_mode)){
+                strcpy(tar,args[i]);
+                hopped=true;
+            }
+            else{
+                if(search(home,args[i],tar))
+                hopped=true;
+                else
+                printf("hop: no such directory\n");
+            }
+        }
+        if(hopped){
+            if(chdir(tar)==0){
+                *changed=true;
+                if(strcmp(prev,ccwd)!=0)
+                strcpy(prev,ccwd);
+                char ncwd[PATH_MAX];
+                getcwd(ncwd,PATH_MAX);
+                update(ncwd,home);
+            }
+        }
+        free(ccwd);
+        free(tar);
+    }
 }
 void reveal(char **args,int len,char* res){
     bool hidden=false;
@@ -297,6 +448,10 @@ void peek(char**args,int len){
         while(i<len){
             int k=0;
             struct stat is_dir;
+            if(strcmp(args[i],"-")==0){
+                printf("peek: invalid syntax\n");
+                return;
+            }
             if(stat(args[i], &is_dir) == 0 && S_ISDIR(is_dir.st_mode)){ //directory check is first since opening a directory also gives null, then the errors output don't need to have one saying not file or dir idk
                 printf("peek: is a directory\n");
                 i++;
