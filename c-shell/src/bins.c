@@ -167,49 +167,51 @@ void reveal(char **args,int len,char* res){
         free(list);
     }
 }
-void locate(char** filename,char* res,int k){
-    char* args[3];
-    char *mid;
-    for(int i=0;i<k;i++){
-        mid=calloc(10000,sizeof(char));
-        args[0]="reveal";
-        args[1]="-t";
-        args[2]=".";
-        reveal(args,2,mid);
-        char *pos =strstr(mid,filename[i]);
-        if((pos)!=NULL){
-            int j=0;
-            while(*(pos-j)!='\0'&& *(pos-j)!='\n'&& *(pos-j)!=' '){
-                j++;
-            }
-            if (pos-j==NULL){
-                strcat(res,"locate: command not found (");
-                strcat(res,filename[i]);
-                strcat(res,")\n");
-            }
-            else
-            strcat(res,*(pos-j+1));
-        }
-        free(mid);
-        mid=calloc(10000,sizeof(char));
-        args[0]="reveal";
-        args[1]="-t";
-        args[2]="/";
-        reveal(args,2,mid);
-        pos =strstr(mid,filename[i]);
-        if((pos)!=NULL){
-            int j=0;
-            while(*(pos-j)!='\0'&& *(pos-j)!='\n'&& *(pos-j)!=' '){
-                j++;
-            }
-            if (pos-j==NULL){
-                strcat(res,"locate: command not found (");
-                strcat(res,filename[i]);
-                strcat(res,")\n");
-            }
-            else
-            strcat(res,*(pos-j+1));
-        }
-        free(mid);
+void locate(char** filename,char* res,int k){// i did  not expect to get punched with an OOM today, also reading the most recent doubt i realised i might have some reading comprehension issues and asked AI for help here as well gonna overhaul the full implemenatation     
+    char *paths=getenv("PATH");
+    if(paths==NULL){
+        printf("cshell: PATH environment variable not set\n");
+        return;
     }
+    char*temp=calloc(strlen(paths)+3,sizeof(char));
+    snprintf(temp,strlen(paths)+3,"%s:.",paths);
+    for(int i=0;i<k;i++){
+        bool exist=false;
+        char* pointer=temp;
+        char* end;
+        while(*pointer){
+            end=strchr(pointer,':');
+            if(end==NULL){
+                end=pointer+strlen(pointer);
+            }
+            int len=end-pointer;
+            if(len>0){
+                char *target;
+                target=calloc(PATH_MAX,sizeof(char));
+                snprintf(target,PATH_MAX,"%.*s/%s",len,pointer,filename[i]);
+                //printf("target: %s\n",target); //for debugging// apparently i need to use %.*s because
+                struct stat path_stat;
+                if(stat(target, &path_stat)==0 && S_ISREG(path_stat.st_mode) && access(target, X_OK) == 0){ //saw that the file needs to be executable got his boiler plate code so access is a function which takes the string and checks if the file is executable or not, also stat with S_ISREG is a macro to check if the file is a regular file or not
+                    char dup[PATH_MAX+2]; //i just saw my own systems env variable has the same path twice(i was hosting some site) so i am running a basic dup check on itt
+                    snprintf(dup,PATH_MAX+2,"%s\n",target);
+                    if(strstr(res,dup)==NULL){
+                        strcat(res,target);
+                        strcat(res,"\n");
+                        exist=true;
+                    }
+                }
+                free(target);
+            }
+            pointer=end;
+            if(*pointer==':'){
+                pointer++;
+            }
+        }
+        if(!exist){
+            strcat(res,"locate: command not found (");
+            strcat(res,filename[i]);
+            strcat(res,")\n");
+        }
+    }
+    free(temp);
 }
