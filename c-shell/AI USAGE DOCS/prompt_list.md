@@ -431,6 +431,7 @@ before reversing is allowed., explain don't give me the whole code, boiler plate
 ![alt text](image-10.png)
 
 ### Prompt 4
+
 ```
 #include<stdio.h>
 #include<string.h>

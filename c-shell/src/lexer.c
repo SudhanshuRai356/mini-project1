@@ -75,11 +75,10 @@ int lexer(char* cmd,token *args,int *len1) {
                                 return -1;
                             }
                             if(cmd[i+1]=='"'||cmd[i+1]=='\\'){
-                                i++;
                                 args[args_index].value[k++]=cmd[i++];
                             }
                             else{
-                                args[args_index].value[k++]=cmd[i++];
+                                args[args_index].value[k++]='\\'; //i don't wanna talk about it
                                 args[args_index].value[k++]=cmd[i++];
                             }
                         }

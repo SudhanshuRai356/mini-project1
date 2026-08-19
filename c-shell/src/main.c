@@ -79,6 +79,22 @@ void process_cmd(char* cmd){
                 str_replace(coms[i]->args[j],"~",home);
             }
         }
+        if(coms[i]->piped){
+            int start=i;
+            while(i<len && coms[i]->piped){
+                i++;
+            }
+            int end=i;
+            for(int k=start+1;k<=end;k++){
+                for(int j=0;j<coms[k]->arg_index;j++){
+                    if(coms[k]->args[j][0]=='~'){
+                        str_replace(coms[k]->args[j],"~",home);
+                    }
+                }
+            }
+            piped(coms,start,end,home,prev);
+            continue;
+        }
         if(strcmp(coms[i]->cmd,"hop")==0)
         {
             bool changed=false;
