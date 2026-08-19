@@ -95,35 +95,43 @@ int parser(token*args, int len, node**coms, int*len1){
                 coms[coms_index]->args=malloc(100*sizeof(char*));
                 coms[coms_index]->arg_index=0;
             }
-            else if(strcmp(args[i].value,"<")==0){ // OP_LT TGT so there will be a redirect of data and the original ends up becoming the input file
-                coms[coms_index]->redir=1;
-                coms[coms_index]->redir_type=1;
-                if(i+1>=len || args[i+1].type==0){
-                    printf("cshell: invalid syntax\n");
-                    return -1;
-                }
-                coms[coms_index]->input_file=args[i+1].value;
-                i++;
-            }
-            else if(strcmp(args[i].value,">")==0){ // OP_GT TGT so there will be a redirect of data and the original ends up becoming the output file
-                coms[coms_index]->redir=1;
-                coms[coms_index]->redir_type=2;
-                if(i+1>=len || args[i+1].type==0){
-                    printf("cshell: invalid syntax\n");
-                    return -1;
-                }
-                coms[coms_index]->output_file=args[i+1].value;
-                i++;
-            }
-            else if(strcmp(args[i].value,">>")==0){ // OP_GTGT TGT so there will be a redirect of data and the original ends up becoming the output file
-                coms[coms_index]->redir=1;
-                coms[coms_index]->redir_type=3;
-                if(i+1>=len || args[i+1].type==0){
-                    printf("cshell: invalid syntax\n");
-                    return -1;
-                }
-                coms[coms_index]->output_file=args[i+1].value;
-                i++;
+            // else if(strcmp(args[i].value,"<")==0){ // OP_LT TGT so there will be a redirect of data and the original ends up becoming the input file
+            //     coms[coms_index]->redir=1;
+            //     coms[coms_index]->redir_type=1;
+            //     if(i+1>=len || args[i+1].type==0){
+            //         printf("cshell: invalid syntax\n");
+            //         return -1;
+            //     }
+            //     coms[coms_index]->input_file=args[i+1].value;
+            //     i++;
+            // }
+            // else if(strcmp(args[i].value,">")==0){ // OP_GT TGT so there will be a redirect of data and the original ends up becoming the output file
+            //     coms[coms_index]->redir=1;
+            //     coms[coms_index]->redir_type=2;
+            //     if(i+1>=len || args[i+1].type==0){
+            //         printf("cshell: invalid syntax\n");
+            //         return -1;
+            //     }
+            //     coms[coms_index]->output_file=args[i+1].value;
+            //     i++;
+            // }
+            // else if(strcmp(args[i].value,">>")==0){ // OP_GTGT TGT so there will be a redirect of data and the original ends up becoming the output file
+            //     coms[coms_index]->redir=1;
+            //     coms[coms_index]->redir_type=3;
+            //     if(i+1>=len || args[i+1].type==0){
+            //         printf("cshell: invalid syntax\n");
+            //         return -1;
+            //     }
+            //     coms[coms_index]->output_file=args[i+1].value;
+            //     i++;
+            // }
+            /*
+            ok so the way i ended up developing my whole command structure i will be needing to have these as args rather than have these as flags specifically cat <x <y <z examples so i think this should work if it does not we will see
+            */
+            else{
+                if(coms[coms_index]->cmd==NULL)
+                coms[coms_index]->cmd=args[i].value;
+                coms[coms_index]->args[coms[coms_index]->arg_index++]=args[i].value;
             }
         }
         else{ // if word or arg then we just handle it

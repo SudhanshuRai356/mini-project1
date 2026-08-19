@@ -162,7 +162,7 @@ void hop(char**args,int len,bool *changed,char* cwd,char* prev,char* home){
         free(tar);
     }
 }
-void reveal(char **args,int len,char* res){
+void reveal(char **args,int len){ //kept having issues when running reveal -t / so i just decided to do away with the buffer all together
     bool hidden=false;
     bool recurse=false;
     if(len==2){ //readdir does not give a sorted array and too  much work to sort it myself so the convinient function scandir idk why the documentation did not have this prior prolly due to  alphabetical order full block reqwritten
@@ -208,14 +208,13 @@ void reveal(char **args,int len,char* res){
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
             if(recurse || hidden){
-                strcat(res,path);
+                printf("%s",path);
                 if(dir)
-                strcat(res,"/");
-                strcat(res,"\n");
+                printf("/");
+                printf("\n");
             }
             else{
-                strcat(res,list[k]->d_name);
-                strcat(res," ");
+                printf("%s ",list[k]->d_name);
             }
             if(recurse && dir){
                 if(strcmp(list[k]->d_name,".")==0 || strcmp(list[k]->d_name,"..")==0){
@@ -228,7 +227,7 @@ void reveal(char **args,int len,char* res){
                 new_args[1] = args[1];
                 new_args[2] = path;
                 new_args[3] = NULL;
-                reveal(new_args, 3, res);
+                reveal(new_args, 3);
             }
             free(path);
             free(list[k]);
@@ -290,14 +289,13 @@ void reveal(char **args,int len,char* res){
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
             if(recurse || hidden){
-                strcat(res,path);
+                printf("%s",path);
                 if(dir)
-                strcat(res,"/");
-                strcat(res,"\n");
+                printf("/");
+                printf("\n");
             }
             else{
-                strcat(res,entry->d_name);
-                strcat(res," ");
+                printf("%s ",entry->d_name);
             }
             if(recurse && dir){
                 if(strcmp(entry->d_name,".")==0 || strcmp(entry->d_name,"..")==0){
@@ -311,12 +309,15 @@ void reveal(char **args,int len,char* res){
                 }
                 new_args[len-1]=path;
                 new_args[len]=NULL;
-                reveal(new_args, len, res);
+                reveal(new_args, len);
             }
             free(path);
             free(list[k]);
         }
         free(list);
+    }
+    if(!recurse && !hidden){
+        printf("\n");
     }
 }
 void locate(char** filename,char* res,int k){// i did  not expect to get punched with an OOM today, also reading the most recent doubt i realised i might have some reading comprehension issues and asked AI for help here as well gonna overhaul the full implemenatation     

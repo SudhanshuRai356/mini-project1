@@ -6,7 +6,9 @@
 #include "lexer.h"
 #include "parser.h"
 #include "bins.h"
+#include "command.h"
 #include<stdbool.h>
+#include<sys/wait.h>
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
@@ -87,16 +89,10 @@ void process_cmd(char* cmd){
         }
         else if(strcmp(coms[i]->cmd,"reveal")==0)
         {
-            char* res=calloc(10000,sizeof(char));
             if (coms[i]->args[1] == NULL) {
                 coms[i]->args[1] = ".";
                 coms[i]->arg_index++;
-                reveal(coms[i]->args, 2, res);
-                printf("%s", res);
-                if(res[strlen(res)-1]!='\n'){
-                    printf("\n");
-                }
-                free(res);
+                reveal(coms[i]->args, 2);
                 continue;
             }
             int j=1;
@@ -105,7 +101,6 @@ void process_cmd(char* cmd){
                 if(strcmp(coms[i]->args[j],"-")==0){
                     if(strcmp(prev,"")==0){
                         printf("reveal: no such directory\n");
-                        free(res);
                         preverr=true;
                         continue;
                     }
@@ -121,16 +116,10 @@ void process_cmd(char* cmd){
             
             if(j+1<coms[i]->arg_index){
                 printf("reveal: invalid syntax\n");
-                free(res);
                 continue;
             }
             else{
-                reveal(coms[i]->args, coms[i]->arg_index, res);
-                printf("%s", res);
-                if(res[strlen(res)-1]!='\n'){
-                    printf("\n");
-                }
-                free(res);
+                reveal(coms[i]->args, coms[i]->arg_index);
             }
         }
         else if(strcmp(coms[i]->cmd,"peek")==0)
@@ -186,7 +175,28 @@ void process_cmd(char* cmd){
             continue;
         }
         else{
-            printf("cshell: command not found: %s\n",coms[i]->cmd);
+            char* in_files[100];
+            int num_in=ext_in(coms[i]->args,&coms[i]->arg_index,in_files);
+            if(num_in<0)
+            continue;
+            char *out_files[100];
+            bool appends[100];
+            int num_out=ext_out(coms[i]->args,&coms[i]->arg_index,out_files,appends);
+            if(num_out<0)
+            continue;
+            pid_t pid=fork();
+            if(pid==0){
+                if(redir_in(in_files,num_in)<0)
+                _exit(1);
+                if(redir_out(out_files,appends,num_out)<0)
+                _exit(1);
+                run_cmd(coms[i]->cmd,coms[i]->args,coms[i]->arg_index);
+                _exit(1);
+            }
+            else{
+                int status;
+                waitpid(pid,&status,0);
+            }
         }
     }
 }
