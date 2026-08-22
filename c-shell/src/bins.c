@@ -18,29 +18,58 @@ bool search(char*home,char*path,char*match){
     if(file==NULL){
         return false;
     }
-    float max_rank=-1.0;
+    double max_rank=-1.0;
+    double max_rank_bk=-1.0;
     char line[PATH_MAX+100];
     bool matched=false;
+    bool matched_bk=false;
+    char matched_path_bk[PATH_MAX];
+    char matched_path[PATH_MAX];
     time_t ct=time(NULL);
     while(fgets(line,sizeof(line),file)){
         element el;
         if(sscanf(line,"{p:\"%[^\"]\",s:\"%d\",t:\"%ld\"}",el.path,&el.score,&el.stamp)==3){
-            if(strstr(el.path,path)!=NULL){
-                struct stat st;
-                if(stat(el.path,&st)==0&&S_ISDIR(st.st_mode)){
-                    double units_old=difftime(ct,el.stamp)/12813.0; //3 hours 33 min 33 sec, give me choice get weird results
-                    double rank=(double)el.score/((units_old/11)+1);//yeah so instead of storing my rank i am storing score and time so that whenever it comes in we can check rank for that time hence the decay is real
-                    if(rank>max_rank){
-                        max_rank=rank;
-                        strcpy(match,el.path);
-                        matched=true;
-                    }
+            if(strstr(el.path,path)==NULL)
+            continue;
+            struct stat st;
+            if(stat(el.path, &st) != 0||!S_ISDIR(st.st_mode)){
+                continue;
+            }
+            double units_old=difftime(ct,el.stamp)/12813.0;
+            double rank=(double)el.score/((units_old/11)+1);
+            char* base=strrchr(el.path,'/');
+            if(base==NULL){
+                base=el.path;
+            }
+            else{
+                base++;
+            }
+            if(strstr(base,path)!=NULL){
+                if(rank>max_rank){
+                    max_rank=rank; 
+                    strcpy(matched_path,el.path); 
+                    matched=true;
                 }
+            }
+            if(rank>max_rank_bk){
+                max_rank_bk=rank; 
+                strcpy(matched_path_bk,el.path); 
+                matched_bk=true;
             }
         } 
     }
     fclose(file);
-    return matched;
+    if(matched){
+        strcpy(match,matched_path);
+        return true;
+    }
+    else if(matched_bk){
+        strcpy(match,matched_path_bk);
+        return true;
+    }
+    else{
+        return false;
+    }
 }
 void update(char* path,char*home){
     char filepath[PATH_MAX];
@@ -56,7 +85,7 @@ void update(char* path,char*home){
         while(fgets(line,sizeof(line),file)&&count<100){
             if(sscanf(line,"{p:\"%[^\"]\",s:\"%d\",t:\"%ld\"}",eldb[count].path,&eldb[count].score,&eldb[count].stamp)==3){
                 double units_old=difftime(ct,eldb[count].stamp)/12813.0;
-                double rank=(double)eldb[count].score/((units_old)/11)+1;
+                double rank=(double)eldb[count].score/((units_old/11)+1);
                 if(rank<min_rank){
                     min_rank=rank;
                     min=count;
@@ -189,7 +218,7 @@ void reveal(char **args,int len){ //kept having issues when running reveal -t / 
             return;
         }
         for (int k=0;k<n;k++){
-            if(!hidden && list[k]->d_name[0]=='.'){// i know there is no way fir hidden to be true but i did copied fromn below and now i realised instead of ranting i could have removed it,eh
+            if((!hidden && list[k]->d_name[0]=='.')||(strcmp(list[k]->d_name,".")==0)||(strcmp(list[k]->d_name,"..")==0)){// i know there is no way fir hidden to be true but i did copied fromn below and now i realised instead of ranting i could have removed it,eh
                 free(list[k]); // lol hidden was something that can happen when i tried reveal -t i got cooked re write now
                 continue;
             }
@@ -208,13 +237,41 @@ void reveal(char **args,int len){ //kept having issues when running reveal -t / 
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
             if(recurse || hidden){
-                printf("%s",path);
-                if(dir)
+                char* segment=path;
+                while(true){
+                    char* sl=strchr(segment,'/');
+                    int seglen;
+                    if(sl==NULL){
+                        seglen=strlen(segment);
+                    }
+                    else{
+                        seglen=sl-segment;
+                    }
+                    if(memchr(segment,' ',seglen)!=NULL){
+                        printf("'%.*s'",seglen,segment);
+                    }
+                    else{
+                        printf("%.*s",seglen,segment);
+                    }
+                    if(sl==NULL){
+                        break;
+                    }
+                    else{
+                        printf("/");
+                        segment=sl+1;
+                    }
+                }
+                if(dir && recurse)
                 printf("/");
                 printf("\n");
             }
             else{
-                printf("%s ",list[k]->d_name);
+                if(strchr(list[k]->d_name,' ')!=NULL){
+                    printf("\'%s\' ",list[k]->d_name);
+                }
+                else{
+                    printf("%s ",list[k]->d_name);
+                }
             }
             if(recurse && dir){
                 if(strcmp(list[k]->d_name,".")==0 || strcmp(list[k]->d_name,"..")==0){
@@ -270,7 +327,7 @@ void reveal(char **args,int len){ //kept having issues when running reveal -t / 
         }
         for(int k=0;k<n;k++){
             struct dirent *entry=list[k];
-            if(!hidden && list[k]->d_name[0]=='.'){
+            if((!hidden && list[k]->d_name[0]=='.')||(strcmp(list[k]->d_name,".")==0)||(strcmp(list[k]->d_name,"..")==0)){
                 free(list[k]);
                 continue;
             }
@@ -289,13 +346,59 @@ void reveal(char **args,int len){ //kept having issues when running reveal -t / 
             if(stat(path, &path_stat)==0 && S_ISDIR(path_stat.st_mode))
                 dir=true;
             if(recurse || hidden){
-                printf("%s",path);
-                if(dir)
+                char* segment=path;
+                while(true){
+                    char* sl=strchr(segment,'/');
+                    int seglen;
+                    if(sl==NULL){
+                        seglen=strlen(segment);
+                    }
+                    else{
+                        seglen=sl-segment;
+                    }
+                    if(memchr(segment,' ',seglen)!=NULL){
+                        printf("'%.*s'",seglen,segment);
+                    }
+                    else{
+                        printf("%.*s",seglen,segment);
+                    }
+                    if(sl==NULL){
+                        break;
+                    }
+                    else{
+                        printf("/");
+                        segment=sl+1;
+                    }
+                }
+                if(dir && recurse)
                 printf("/");
                 printf("\n");
             }
             else{
-                printf("%s ",entry->d_name);
+                char* segment=entry->d_name;
+                while(true){
+                    char* sl=strchr(segment,'/');
+                    int seglen;
+                    if(sl==NULL){
+                        seglen=strlen(segment);
+                    }
+                    else{
+                        seglen=sl-segment;
+                    }
+                    if(memchr(segment,' ',seglen)!=NULL){
+                        printf("'%.*s''",seglen,segment);
+                    }
+                    else{
+                        printf("%.*s",seglen,segment);
+                    }
+                    if(sl==NULL){
+                        break;
+                    }
+                    else{
+                        printf("/");
+                        segment=sl+1;
+                    }
+                }
             }
             if(recurse && dir){
                 if(strcmp(entry->d_name,".")==0 || strcmp(entry->d_name,"..")==0){

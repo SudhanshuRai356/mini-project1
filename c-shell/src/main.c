@@ -118,6 +118,10 @@ void process_cmd(char* cmd){
                     if(strcmp(prev,"")==0){
                         printf("reveal: no such directory\n");
                         preverr=true;
+                        i++;
+                        if(i==len1){
+                            break;
+                        }
                         continue;
                     }
                     strcpy(coms[i]->args[j],prev);
