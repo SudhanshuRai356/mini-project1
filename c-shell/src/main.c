@@ -230,7 +230,11 @@ int main(){
         cmd=malloc(999*sizeof(char));
         // scanf("%[^\n]s",cmd); //read the command as the whole line breaaking  att new line char thats why this retarded scanf
         // scanf("%*c"); //to eat the \n  from the previous scanf
-        fgets(cmd,999,stdin); // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
+        if(fgets(cmd,999,stdin) == NULL){ // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
+            free(cmd); // to stop the terminal from breaking when i use ctrl d given the result by claude
+            printf("\n");
+            break;
+        }
         cmd[strcspn(cmd, "\n")] = 0; // remove the trailing newline character
         if(strlen(cmd)==0){
             free(cmd);

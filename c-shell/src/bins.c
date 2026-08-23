@@ -478,7 +478,7 @@ void peek(char**args,int len){
     int i=1;
     bool rev=false;
     bool num=false;
-    while(i<len && args[i][0]=='-'){
+    while(i<len && args[i][0]=='-' && strlen(args[i])>1){
         size_t j=1;
         while(j<strlen(args[i])){
             if(args[i][j]=='r'){
@@ -523,28 +523,39 @@ void peek(char**args,int len){
                     continue;
                 }
             }
-            char *line=NULL; //posix read file boiler plate
+            char **lines=NULL; //posix read file boiler plate
+            char *linebuf=NULL;
+            int lcount=0, lcap=0;
             size_t length=0;
-            ssize_t read;
-            read=getline(&line,&length,file);
-            while(read!=-1){
-                if(strcmp(line,"\n")==0){ //doubted currently maybe it should not run at all or it should yell then continue currently have the yell then continue setup made
+            ssize_t r;
+            while((r=getline(&linebuf,&length,file))!=-1){
+                if(lcount==lcap){
+                    lcap = lcap ? lcap*2 : 16;
+                    lines=realloc(lines, lcap*sizeof(char*));
+                }
+                if(r>0 && linebuf[r-1]=='\n'){
+                    linebuf[r-1]='\0';
+                }
+                lines[lcount++]=strdup(linebuf);
+            }
+            free(linebuf);
+            if(file!=stdin)
+            fclose(file);
+            else
+            clearerr(stdin); // terminal just quitting for some reason this should help
+            for(int m=0;m<lcount;m++){
+                if(strcmp(lines[m],"")==0){
                     printf("\n");
                 }
                 else{
-                    if(read>0 && line[read-1]=='\n'){
-                        line[read-1]='\0';
-                    }
                     if(num)
-                    printf("%d %s\n",++k,line);
+                    printf("%d %s\n",++k,lines[m]);
                     else
-                    printf("%s\n",line);
+                    printf("%s\n",lines[m]);
                 }
-                read=getline(&line,&length,file);
+                free(lines[m]);
             }
-            free(line);
-            if(file!=stdin)
-            fclose(file);
+            free(lines);
             i++;
         }
     }
@@ -552,9 +563,43 @@ void peek(char**args,int len){
         while(i<len){
             int k=0;
             struct stat is_dir;
-            if(strcmp(args[i],"-")==0){
-                printf("peek: invalid syntax\n");
-                return;
+                        if(strcmp(args[i],"-")==0){
+                char **lines=NULL;
+                int lcount=0, lcap=0;
+                char *linebuf=NULL;
+                size_t length=0;
+                ssize_t r;
+                while((r=getline(&linebuf,&length,stdin))!=-1){
+                    if(lcount==lcap){
+                        lcap = lcap ? lcap*2 : 16;
+                        lines=realloc(lines, lcap*sizeof(char*));
+                    }
+                    if(r>0 && linebuf[r-1]=='\n'){
+                        linebuf[r-1]='\0';
+                    }
+                    lines[lcount++]=strdup(linebuf);
+                }
+                clearerr(stdin); // same hopes of fixing exit shell issues
+                free(linebuf);
+                int total=0;
+                for(int m=0;m<lcount;m++)
+                    if(strlen(lines[m])>0) total++;
+                int kk=total;
+                for(int m=lcount-1;m>=0;m--){
+                    if(strcmp(lines[m],"")==0){
+                        printf("\n");
+                    }
+                    else{
+                        if(num)
+                        printf("%d %s\n",kk--,lines[m]);
+                        else
+                        printf("%s\n",lines[m]);
+                    }
+                    free(lines[m]);
+                }
+                free(lines);
+                i++;
+                continue;
             }
             if(stat(args[i], &is_dir) == 0 && S_ISDIR(is_dir.st_mode)){ //directory check is first since opening a directory also gives null, then the errors output don't need to have one saying not file or dir idk
                 printf("peek: is a directory\n");
