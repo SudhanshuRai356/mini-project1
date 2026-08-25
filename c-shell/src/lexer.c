@@ -12,7 +12,7 @@ int lexer(char* cmd,token *args,int *len1) {
         if(i>=len){
             break;
         }
-        args[args_index].value = malloc(100 * sizeof(char));
+        args[args_index].value = malloc((len-i+1) * sizeof(char));
         if(cmd[i]=='|'){ //soecuak  1/5
             args[args_index].value[0] = cmd[i];
             args[args_index].value[1] = '\0';
@@ -60,7 +60,7 @@ int lexer(char* cmd,token *args,int *len1) {
                 if(cmd[i]=='\\'){
                     i++;
                     if(i>=len){
-                        printf("chell: invalid syntax");
+                        // printf("cshell: invalid syntax\n");
                         return -1;
                     }
                     args[args_index].value[k++]=cmd[i++];
@@ -71,10 +71,10 @@ int lexer(char* cmd,token *args,int *len1) {
                         if(cmd[i]=='\\'){
                             i++;
                             if(i>=len){
-                                printf("cshell: invalid syntax");
+                                // printf("cshell: invalid syntax\n");
                                 return -1;
                             }
-                            if(cmd[i+1]=='"'||cmd[i+1]=='\\'){
+                            if(cmd[i]=='"'||cmd[i]=='\\'){
                                 args[args_index].value[k++]=cmd[i++];
                             }
                             else{
@@ -87,7 +87,7 @@ int lexer(char* cmd,token *args,int *len1) {
                         }
                     }
                     if (i>=len || cmd[i]!='"'){
-                        printf("cshell: invalid syntax");
+                        // printf("cshell: invalid syntax\n");
                         return -1;
                     }
                     i++;
@@ -98,7 +98,7 @@ int lexer(char* cmd,token *args,int *len1) {
                         args[args_index].value[k++]=cmd[i++];
                     }
                     if(i>=len || cmd[i]!='\''){
-                        printf("cshell: invalid syntax");
+                        // printf("cshell: invalid syntax\n");
                         return -1;
                     }
                     i++;

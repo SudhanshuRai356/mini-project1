@@ -81,7 +81,7 @@ void process_cmd(char* cmd){
         }
         if(coms[i]->piped){
             int start=i;
-            while(i<len && coms[i]->piped){
+            while(i<len1 && coms[i]->piped){
                 i++;
             }
             int end=i;
@@ -93,7 +93,32 @@ void process_cmd(char* cmd){
                 }
             }
             piped(coms,start,end,home,prev);
+            //continue; for requirement of part c ; and & should end but this needs to be removed when starting part D
+            return;
+        }
+        char *in_files[100];
+        int num_in=ext_in(coms[i]->args,&coms[i]->arg_index,in_files);
+        if(num_in<0){
+            if(coms[i]->background || coms[i]->semi){
+                return;
+            }
             continue;
+        }
+        char *out_files[100];
+        bool appends[100];
+        int num_out=ext_out(coms[i]->args,&coms[i]->arg_index,out_files,appends);
+        if(num_out<0){
+            if(coms[i]->background || coms[i]->semi){
+                return;
+            }
+            continue;
+        }
+        bool need_redir;
+        if(num_in>0 || num_out>0){
+            need_redir=true;
+        }
+        else{
+            need_redir=false;
         }
         if(strcmp(coms[i]->cmd,"hop")==0)
         {
@@ -101,6 +126,26 @@ void process_cmd(char* cmd){
             char* ccwd=calloc(PATH_MAX,sizeof(char));
             char* cwd=malloc(PATH_MAX * sizeof(char));
             getcwd(cwd,PATH_MAX);
+            if(need_redir){
+                pid_t pid=fork();
+                if(pid==0){
+                    if(redir_in(in_files,num_in)<0)
+                    {
+                        _exit(1);
+                    }
+                    if(redir_out(out_files,appends,num_out)<0)
+                    {
+                        _exit(1);
+                    }
+                    hop(coms[i]->args,coms[i]->arg_index,&changed,ccwd,prev,home);
+                    _exit(1);
+                }
+                else{
+                    int status;
+                    waitpid(pid,&status,0);
+                }
+            }
+            else
             hop(coms[i]->args,coms[i]->arg_index,&changed,ccwd,prev,home);
         }
         else if(strcmp(coms[i]->cmd,"reveal")==0)
@@ -108,6 +153,26 @@ void process_cmd(char* cmd){
             if (coms[i]->args[1] == NULL) {
                 coms[i]->args[1] = ".";
                 coms[i]->arg_index++;
+                if(need_redir){
+                    pid_t pid=fork();
+                    if(pid==0){
+                        if(redir_in(in_files,num_in)<0)
+                        {
+                            _exit(1);
+                        }
+                        if(redir_out(out_files,appends,num_out)<0)
+                        {
+                            _exit(1);
+                        }
+                        reveal(coms[i]->args, 2);
+                        _exit(1);
+                    }
+                    else{
+                        int status;
+                        waitpid(pid,&status,0);
+                    }
+                }
+                else
                 reveal(coms[i]->args, 2);
                 continue;
             }
@@ -139,7 +204,29 @@ void process_cmd(char* cmd){
                 continue;
             }
             else{
-                reveal(coms[i]->args, coms[i]->arg_index);
+                if(need_redir){
+                    pid_t pid=fork();
+                    if(pid==0){
+                        if(redir_in(in_files,num_in)<0)
+                        {
+                            _exit(1);
+                        }
+                        if(redir_out(out_files,appends,num_out)<0)
+                        {
+                            _exit(1);
+                        }
+                        reveal(coms[i]->args, coms[i]->arg_index);
+                        _exit(1);
+                    }
+                    else{
+                        int status;
+                        waitpid(pid,&status,0);
+                    }
+                }
+                else
+                {
+                    reveal(coms[i]->args, coms[i]->arg_index);
+                }
             }
         }
         else if(strcmp(coms[i]->cmd,"peek")==0)
@@ -170,7 +257,29 @@ void process_cmd(char* cmd){
                 }
                 j++;
             }
-            peek(coms[i]->args, coms[i]->arg_index);
+            if(need_redir){
+                pid_t pid=fork();
+                if(pid==0){
+                    if(redir_in(in_files,num_in)<0)
+                    {
+                        _exit(1);
+                    }
+                    if(redir_out(out_files,appends,num_out)<0)
+                    {
+                        _exit(1);
+                    }
+                    peek(coms[i]->args, coms[i]->arg_index);
+                    _exit(1);
+                }
+                else{
+                    int status;
+                    waitpid(pid,&status,0);
+                }
+            }
+            else
+            {
+                peek(coms[i]->args, coms[i]->arg_index);
+            }
         }
         else if(strcmp(coms[i]->cmd,"locate")==0)
         {
@@ -187,23 +296,38 @@ void process_cmd(char* cmd){
             }
             new_args[k]=NULL;
             char* res=calloc(10000,sizeof(char));
-            locate(new_args,res,k);
-            printf("%s", res);
+            if(need_redir){
+                pid_t pid=fork();
+                if(pid==0){
+                    if(redir_in(in_files,num_in)<0)
+                    {
+                        _exit(1);
+                    }
+                    if(redir_out(out_files,appends,num_out)<0)
+                    {
+                        _exit(1);
+                    }
+                    locate(new_args,res,k);
+                    printf("%s", res);
+                    free(res);
+                    _exit(1);
+                }
+                else{
+                    int status;
+                    waitpid(pid,&status,0);
+                }
+            }
+            else
+            {
+                locate(new_args,res,k);
+                printf("%s", res);
+            }
             free(res);
         }
         else if(coms[i]->cmd==NULL){
             continue;
         }
         else{
-            char* in_files[100];
-            int num_in=ext_in(coms[i]->args,&coms[i]->arg_index,in_files);
-            if(num_in<0)
-            continue;
-            char *out_files[100];
-            bool appends[100];
-            int num_out=ext_out(coms[i]->args,&coms[i]->arg_index,out_files,appends);
-            if(num_out<0)
-            continue;
             pid_t pid=fork();
             if(pid==0){
                 if(redir_in(in_files,num_in)<0)
@@ -218,6 +342,12 @@ void process_cmd(char* cmd){
                 waitpid(pid,&status,0);
             }
         }
+        if(coms[i]->background){ //need to remove once we start doing part d
+            return;
+        }
+        if(coms[i]->semi){
+            return;
+        }
     }
 }
 int main(){
@@ -227,10 +357,10 @@ int main(){
         getpwd();
         printf("<%s@%s:%s>",user,host,pwd);
         char* cmd;
-        cmd=malloc(999*sizeof(char));
+        cmd=malloc(1026*sizeof(char));
         // scanf("%[^\n]s",cmd); //read the command as the whole line breaaking  att new line char thats why this retarded scanf
         // scanf("%*c"); //to eat the \n  from the previous scanf
-        if(fgets(cmd,999,stdin) == NULL){ // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
+        if(fgets(cmd,1026,stdin) == NULL){ // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
             free(cmd); // to stop the terminal from breaking when i use ctrl d given the result by claude
             printf("\n");
             break;

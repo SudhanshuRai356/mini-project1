@@ -240,14 +240,14 @@ int ext_out(char **args,int *args_index,char** out,bool* append){
 }
 void piped(node** coms,int start,int end,char*home,char* prev){
     int num=end-start+1;
-    int pipes[num+1][2]; //+1 not -1 bruh
-    for(int k=0;k<num;k++){
+    int pipes[num][2];
+    for(int k=0;k<num-1;k++){
         if(pipe(pipes[k])<0){
             printf("cshell: pipe not made"); //no error message specified for this but need to put it here still so this is it
             return;
         }
     }
-    pid_t pids[num+1];
+    pid_t pids[num];
     for(int k=0;k<num;k++){
         node* cur_cmd=coms[start+k];
         char *in_files[100];
