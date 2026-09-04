@@ -1028,3 +1028,12 @@ the moment i hit ctrl+d this happens to send eof to my stdin i need to hit ctrl 
 ![alt text](image-14.png)
 ![alt text](image-15.png)
 ![alt text](image-16.png)
+
+### Prompt 6
+```
+uploaded main.c as well with this prompt
+i want to know why exactly why code is printing out the issue even when i am using the terminal
+```
+
+![alt text](image-17.png)
+![alt text](image-18.png)

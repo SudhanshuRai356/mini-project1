@@ -24,25 +24,52 @@ long long jobs=1;
 typedef struct bg{
     pid_t pid;
     int job;
+    char*cmd;
 }bg;
 bg* bg_list;
-void assign_bg(pid_t pid){
+void assign_bg(pid_t pid,char* cmd){
     bg_list=realloc(bg_list,jobs*sizeof(bg));
     bg_list[jobs-1].pid=pid;
     bg_list[jobs-1].job=jobs;
+    bg_list[jobs-1].cmd=cmd;
     printf("[%lld] %d\n",jobs,pid);
     jobs++;
 }
 void announce_bg(pid_t pid,bool stat){
     if(stat)
-    printf("command with pid %d exited normally\n",pid);
+    printf("%s with pid %d exited normally\n",bg_list[job-1].cmd,pid);
     else
-    printf("command with pid %d exited abnormally\n",pid);
+    printf("%s with pid %d exited abnormally\n",bg_list[job-1].cmd,pid);
+}
+typedef struct waiting{
+    pid_t pid;
+    bool stat;
+}waiting;
+waiting wait_list[100]; // like genuinely don't think more than 100 child processes will finish their work while some process is foregrounding
+volatile sig_atomic_t wait_index=0; //volatile since it will be changed in the signal handler and sig_atomic_t since it will be changed in the signal handler
+void no_longer_waiting(){
+    sigset_t old,blocking;
+    sigemptyset(&blocking);
+    sigaddset(&blocking,SIGCHLD);
+    sigprocmask(SIG_BLOCK,&blocking,&old);
+    for(int i=0;i<wait_index;i++){
+        announce_bg(wait_list[i].pid,wait_list[i].stat);
+    }
+    wait_index=0;
+    sigprocmask(SIG_SETMASK,&old,NULL); //llm generated code did not know how to write this 
 }
 void plant(int sig){ //since it will kill zombies, you know pvz reference
     (void)sig; //this is the sigchild boilerplat from stackoverflow as well
     int err_no=errno;
-    while(waitpid(-1,NULL,WNOHANG)>0);
+    int status=0;
+    pid_t pid;
+    while((pid=waitpid(-1,&status,WNOHANG))>0){
+        if(wait_index<100){
+            wait_list[wait_index].pid=pid;
+            wait_list[wait_index].stat=WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            wait_index++;
+        }
+    }
     errno=err_no;
 }
 void prevdir(){
@@ -163,7 +190,7 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    assign_bg(pid);
+                    assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
@@ -195,8 +222,6 @@ void process_cmd(char* cmd){
             if(pid==0){
                 free(ccwd);
                 free(cwd);
-                int status=0;
-                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
@@ -213,7 +238,7 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    assign_bg(pid);
+                    assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
@@ -242,8 +267,6 @@ void process_cmd(char* cmd){
                 else
                 reveal(coms[i]->args, 2);
                 if(pid==0){
-                    int status=0;
-                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -269,8 +292,6 @@ void process_cmd(char* cmd){
             }
             if(preverr){
                 if(pid==0){
-                    int status=0;
-                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -279,8 +300,6 @@ void process_cmd(char* cmd){
             if(j+1<coms[i]->arg_index){
                 printf("reveal: invalid syntax\n");
                 if(pid==0){
-                    int status=0;
-                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -309,8 +328,6 @@ void process_cmd(char* cmd){
                 {
                     reveal(coms[i]->args, coms[i]->arg_index);
                     if(pid==0){
-                        int status=0;
-                        announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                         _exit(0);
                     }
                 }
@@ -327,7 +344,7 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    assign_bg(pid);
+                    assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
@@ -354,8 +371,6 @@ void process_cmd(char* cmd){
                     }
                     printf("peek: invalid syntax\n");
                     if(pid==0){
-                        int status=0;
-                        announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                         _exit(0);
                     }
                     return;
@@ -385,8 +400,6 @@ void process_cmd(char* cmd){
             {
                 peek(coms[i]->args, coms[i]->arg_index);
                 if(pid==0){
-                    int status=0;
-                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
             }
@@ -403,15 +416,13 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    assign_bg(pid);
+                    assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
             if(coms[i]->arg_index<2){
                 printf("locate: invalid syntax\n");
                 if(pid==0){
-                    int status=0;
-                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -453,8 +464,6 @@ void process_cmd(char* cmd){
             }
             free(res);
             if(pid==0){
-                int status=0;
-                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
@@ -471,7 +480,7 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    assign_bg(pid);
+                    assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
@@ -489,24 +498,23 @@ void process_cmd(char* cmd){
                 waitpid(pid2,&status,0);
                 if (WIFEXITED(status) && WEXITSTATUS(status) == 8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
                     if(pid==0){
-                        announce_bg(getpid(),false);
                         _exit(0);
                     }
                     break;
                 }
             }
             if(pid==0){
-                int status=0;
-                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
     }
+    no_longer_waiting(); //this will announce all the bg processes only when we are done running
 }
 int main(){
     init_shell();
     prevdir();
     while(1){
+        no_longer_waiting();
         getpwd();
         printf("<%s@%s:%s>",user,host,pwd);
         char* cmd;
