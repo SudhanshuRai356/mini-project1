@@ -18,6 +18,31 @@ char* home;
 char* user;
 char* host;
 char* prev;
+long long jobs=1;
+typedef struct bg{
+    pid_t pid;
+    int job;
+}bg;
+bg* bg_list;
+int assign_bg(pid_t pid){
+    bg_list=realloc(bg_list,jobs*sizeof(bg));
+    bg_list[jobs-1].pid=pid;
+    bg_list[jobs-1].job=jobs;
+    printf("[%lld] %d\n",jobs,pid);
+    jobs++;
+    return jobs-1;
+}
+void announce_bg(int job_tracker){
+    int status;
+    pid_t pid=waitpid(bg_list[job_tracker-1].pid,&status,WNOHANG);
+    if(status==0){
+        printf("command with pid %d exited normally\n",bg_list[job_tracker-1].pid);
+    }
+    else{
+        printf("command with pid %d exited abnormally\n",bg_list[job_tracker-1].pid);
+    }
+    return;
+}
 void prevdir(){
     prev=calloc(PATH_MAX,sizeof(char)); //just initialsing prev and will do this once could have been in init shell but oh well
     return;
@@ -93,15 +118,12 @@ void process_cmd(char* cmd){
                 }
             }
             piped(coms,start,end,home,prev);
-            //continue; for requirement of part c ; and & should end but this needs to be removed when starting part D
-            return;
+            continue; //for requirement of part c ; and & should end but this needs to be removed when starting part D
+            //return;
         }
         char *in_files[100];
         int num_in=ext_in(coms[i]->args,&coms[i]->arg_index,in_files);
         if(num_in<0){
-            if(coms[i]->background || coms[i]->semi){
-                return;
-            }
             continue;
         }
         char *out_files[100];
@@ -122,6 +144,19 @@ void process_cmd(char* cmd){
         }
         if(strcmp(coms[i]->cmd,"hop")==0)
         {
+            pid_t pid=-2; //pid tracker //changed 0 to -2 since the self report conditions at the bottom works like that
+            int job_tracker=-1; //will make the announcement easier after the process ends
+            if(coms[i]->background)
+            pid=fork();
+            if(pid!=0){ //essential if this is a background process we will fork it finish and then just continue, not gonna wait for it to finish
+                if (pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    job_tracker=assign_bg(pid);
+                    continue;
+                }
+            }
             bool changed=false;
             char* ccwd=calloc(PATH_MAX,sizeof(char));
             char* cwd=malloc(PATH_MAX * sizeof(char));
@@ -147,9 +182,28 @@ void process_cmd(char* cmd){
             }
             else
             hop(coms[i]->args,coms[i]->arg_index,&changed,ccwd,prev,home);
+            if(pid==0){
+                free(ccwd);
+                free(cwd);
+                announce_bg(job_tracker);
+                _exit(0);
+            }
         }
         else if(strcmp(coms[i]->cmd,"reveal")==0)
         {
+            pid_t pid=-2;
+            int job_tracker=-1;
+            if(coms[i]->background)
+            pid=fork();
+            if(pid!=0){
+                if (pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    job_tracker=assign_bg(pid);
+                    continue;
+                }
+            }
             if (coms[i]->args[1] == NULL) {
                 coms[i]->args[1] = ".";
                 coms[i]->arg_index++;
@@ -174,6 +228,10 @@ void process_cmd(char* cmd){
                 }
                 else
                 reveal(coms[i]->args, 2);
+                if(pid==0){
+                    announce_bg(job_tracker);
+                    _exit(0);
+                }
                 continue;
             }
             int j=1;
@@ -196,11 +254,19 @@ void process_cmd(char* cmd){
                 j++;
             }
             if(preverr){
+                if(pid==0){
+                    announce_bg(job_tracker);
+                    _exit(0);
+                }
                 continue;
             }
             
             if(j+1<coms[i]->arg_index){
                 printf("reveal: invalid syntax\n");
+                if(pid==0){
+                    announce_bg(job_tracker);
+                    _exit(0);
+                }
                 continue;
             }
             else{
@@ -226,11 +292,28 @@ void process_cmd(char* cmd){
                 else
                 {
                     reveal(coms[i]->args, coms[i]->arg_index);
+                    if(pid==0){
+                        announce_bg(job_tracker);
+                        _exit(0);
+                    }
                 }
             }
         }
         else if(strcmp(coms[i]->cmd,"peek")==0)
         {
+            pid_t pid=-2;
+            int job_tracker=-1;
+            if(coms[i]->background)
+            pid=fork();
+            if(pid!=0){
+                if (pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    job_tracker=assign_bg(pid);
+                    continue;
+                }
+            }
             if(coms[i]->arg_index<2){
                 coms[i]->args[1]="-";
                 coms[i]->arg_index++;
@@ -253,6 +336,10 @@ void process_cmd(char* cmd){
                         continue;
                     }
                     printf("peek: invalid syntax\n");
+                    if(pid==0){
+                        announce_bg(job_tracker);
+                        _exit(0);
+                    }
                     return;
                 }
                 j++;
@@ -279,12 +366,33 @@ void process_cmd(char* cmd){
             else
             {
                 peek(coms[i]->args, coms[i]->arg_index);
+                if(pid==0){
+                    announce_bg(job_tracker);
+                    _exit(0);
+                }
             }
         }
         else if(strcmp(coms[i]->cmd,"locate")==0)
         {
+            pid_t pid=-2;
+            int job_tracker=-1;
+            if(coms[i]->background)
+            pid=fork();
+            if(pid!=0){
+                if (pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    job_tracker=assign_bg(pid);
+                    continue;
+                }
+            }
             if(coms[i]->arg_index<2){
                 printf("locate: invalid syntax\n");
+                if(pid==0){
+                    announce_bg(job_tracker);
+                    _exit(0);
+                }
                 continue;
             }
             int k=0;
@@ -323,13 +431,30 @@ void process_cmd(char* cmd){
                 printf("%s", res);
             }
             free(res);
+            if(pid==0){
+                announce_bg(job_tracker);
+                _exit(0);
+            }
         }
         else if(coms[i]->cmd==NULL){
             continue;
         }
         else{
-            pid_t pid=fork();
-            if(pid==0){
+            pid_t pid=-2;
+            int job_tracker=-1;
+            if(coms[i]->background)
+            pid=fork();
+            if(pid!=0){
+                if (pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    job_tracker=assign_bg(pid);
+                    continue;
+                }
+            }
+            pid_t pid2=fork();
+            if(pid2==0){
                 if(redir_in(in_files,num_in)<0)
                 _exit(1);
                 if(redir_out(out_files,appends,num_out)<0)
@@ -339,14 +464,19 @@ void process_cmd(char* cmd){
             }
             else{
                 int status;
-                waitpid(pid,&status,0);
+                waitpid(pid2,&status,0);
+                if (status==8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
+                    if(pid==0){
+                        announce_bg(job_tracker);
+                        _exit(0);
+                    }
+                    break;
+                }
             }
-        }
-        if(coms[i]->background){ //need to remove once we start doing part d
-            return;
-        }
-        if(coms[i]->semi){
-            return;
+            if(pid==0){
+                announce_bg(job_tracker);
+                _exit(0);
+            }
         }
     }
 }

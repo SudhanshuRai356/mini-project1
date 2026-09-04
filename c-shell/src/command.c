@@ -72,7 +72,7 @@ void run_cmd(char* cmd,char** args,int arg_index){
     }
     execvp(cmd,args);
     printf("cshell: command not found (%s)\n",cmd);
-    _exit(1);
+    _exit(8); //to differentiate from normal command errors
 }
 int redir_in(char**in,int num){
     if(num==0)
