@@ -8,6 +8,7 @@
 #include "bins.h"
 #include "command.h"
 #include<stdbool.h>
+#include<fcntl.h>
 #include<sys/wait.h>
 #include<signal.h> //to make the signal handling since the child process in bg might sent a signal to fg to print and all that
 #include<errno.h> //to make the diiferentiation of errors easier
@@ -36,10 +37,17 @@ void assign_bg(pid_t pid,char* cmd){
     jobs++;
 }
 void announce_bg(pid_t pid,bool stat){
+    int job=-1;
+    for(int i=0;i<jobs-1;i++){
+        if(bg_list[i].pid==pid){
+            job=i;
+            break;
+        }
+    }
     if(stat)
-    printf("%s with pid %d exited normally\n",bg_list[job-1].cmd,pid);
+    printf("%s with pid %d exited normally\n",bg_list[job].cmd,pid);
     else
-    printf("%s with pid %d exited abnormally\n",bg_list[job-1].cmd,pid);
+    printf("%s with pid %d exited abnormally\n",bg_list[job].cmd,pid);
 }
 typedef struct waiting{
     pid_t pid;
@@ -182,7 +190,6 @@ void process_cmd(char* cmd){
             //int job_tracker=-1; //will make the announcement easier after the process ends //this implementation kept breaking 
             if(coms[i]->background)
             {
-                  
                 pid=fork();
             }
             if(pid!=0 && coms[i]->background){ //essential if this is a background process we will fork it finish and then just continue, not gonna wait for it to finish
@@ -192,6 +199,13 @@ void process_cmd(char* cmd){
                 else{
                     assign_bg(pid,coms[i]->cmd);
                     continue;
+                }
+            }
+            if (pid==0){
+                int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
+                if(devnull<=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
                 }
             }
             bool changed=false;
@@ -240,6 +254,13 @@ void process_cmd(char* cmd){
                 else{
                     assign_bg(pid,coms[i]->cmd);
                     continue;
+                }
+            }
+            if (pid==0){
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull<=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
                 }
             }
             if (coms[i]->args[1] == NULL) {
@@ -348,6 +369,13 @@ void process_cmd(char* cmd){
                     continue;
                 }
             }
+            if (pid==0){
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull<=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
+                }
+            }
             if(coms[i]->arg_index<2){
                 coms[i]->args[1]="-";
                 coms[i]->arg_index++;
@@ -420,6 +448,13 @@ void process_cmd(char* cmd){
                     continue;
                 }
             }
+            if (pid==0){
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull<=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
+                }
+            }
             if(coms[i]->arg_index<2){
                 printf("locate: invalid syntax\n");
                 if(pid==0){
@@ -482,6 +517,13 @@ void process_cmd(char* cmd){
                 else{
                     assign_bg(pid,coms[i]->cmd);
                     continue;
+                }
+            }
+            if (pid==0){
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull<=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
                 }
             }
             pid_t pid2=fork();
