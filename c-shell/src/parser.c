@@ -42,7 +42,6 @@ int parser(token*args, int len, node**coms, int*len1){
                 coms[coms_index]->piped=1;
                 coms_index++;
                 if(i+1>=len || args[i+1].type==0 || coms[coms_index-1]->cmd==NULL){
-                    printf("cshell: invalid syntax\n");
                     return -1;
                 }
                 coms[coms_index]=malloc(sizeof(node));
@@ -61,7 +60,6 @@ int parser(token*args, int len, node**coms, int*len1){
                 coms[coms_index]->semi=1;
                 coms_index++;
                 if(i+1>=len || args[i+1].type==0 || coms[coms_index-1]->cmd==NULL){
-                    printf("cshell: invalid syntax\n");
                     return -1;
                 }
                 coms[coms_index]=malloc(sizeof(node));
@@ -80,7 +78,6 @@ int parser(token*args, int len, node**coms, int*len1){
                 coms[coms_index]->background=1;
                 coms_index++;
                 if(coms[coms_index-1]->cmd==NULL){
-                    printf("cshell: invalid syntax\n");
                     return -1;
                 }
                 coms[coms_index]=malloc(sizeof(node));

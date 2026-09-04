@@ -9,6 +9,8 @@
 #include "command.h"
 #include<stdbool.h>
 #include<sys/wait.h>
+#include<signal.h> //to make the signal handling since the child process in bg might sent a signal to fg to print and all that
+#include<errno.h> //to make the diiferentiation of errors easier
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
 // #ifndef PATH_MAX
 // #define PATH_MAX 4096 //need this for vscode brerakpoint debugging since normal rrrun refuses to acknowledge that limist.sh has pathmax
@@ -24,24 +26,24 @@ typedef struct bg{
     int job;
 }bg;
 bg* bg_list;
-int assign_bg(pid_t pid){
+void assign_bg(pid_t pid){
     bg_list=realloc(bg_list,jobs*sizeof(bg));
     bg_list[jobs-1].pid=pid;
     bg_list[jobs-1].job=jobs;
     printf("[%lld] %d\n",jobs,pid);
     jobs++;
-    return jobs-1;
 }
-void announce_bg(int job_tracker){
-    int status;
-    pid_t pid=waitpid(bg_list[job_tracker-1].pid,&status,WNOHANG);
-    if(status==0){
-        printf("command with pid %d exited normally\n",bg_list[job_tracker-1].pid);
-    }
-    else{
-        printf("command with pid %d exited abnormally\n",bg_list[job_tracker-1].pid);
-    }
-    return;
+void announce_bg(pid_t pid,bool stat){
+    if(stat)
+    printf("command with pid %d exited normally\n",pid);
+    else
+    printf("command with pid %d exited abnormally\n",pid);
+}
+void plant(int sig){ //since it will kill zombies, you know pvz reference
+    (void)sig; //this is the sigchild boilerplat from stackoverflow as well
+    int err_no=errno;
+    while(waitpid(-1,NULL,WNOHANG)>0);
+    errno=err_no;
 }
 void prevdir(){
     prev=calloc(PATH_MAX,sizeof(char)); //just initialsing prev and will do this once could have been in init shell but oh well
@@ -72,6 +74,11 @@ void init_shell(){
     getlogin_r(user, 100);
     gethostname(host, 100);
     home=&pwd[0];
+    struct sigaction sa={0}; //sigaction api boiler plate apparently previously they use to use signal function thats where the header name comes from
+    sa.sa_handler=plant;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags=SA_RESTART;
+    sigaction(SIGCHLD,&sa,NULL);
 }
 char* getpwd(){
     pwd=malloc(PATH_MAX * sizeof(char));
@@ -145,15 +152,18 @@ void process_cmd(char* cmd){
         if(strcmp(coms[i]->cmd,"hop")==0)
         {
             pid_t pid=-2; //pid tracker //changed 0 to -2 since the self report conditions at the bottom works like that
-            int job_tracker=-1; //will make the announcement easier after the process ends
+            //int job_tracker=-1; //will make the announcement easier after the process ends //this implementation kept breaking 
             if(coms[i]->background)
-            pid=fork();
-            if(pid!=0){ //essential if this is a background process we will fork it finish and then just continue, not gonna wait for it to finish
+            {
+                  
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){ //essential if this is a background process we will fork it finish and then just continue, not gonna wait for it to finish
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    job_tracker=assign_bg(pid);
+                    assign_bg(pid);
                     continue;
                 }
             }
@@ -176,7 +186,7 @@ void process_cmd(char* cmd){
                     _exit(1);
                 }
                 else{
-                    int status;
+                    int status=0;
                     waitpid(pid,&status,0);
                 }
             }
@@ -185,22 +195,25 @@ void process_cmd(char* cmd){
             if(pid==0){
                 free(ccwd);
                 free(cwd);
-                announce_bg(job_tracker);
+                int status=0;
+                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
         else if(strcmp(coms[i]->cmd,"reveal")==0)
         {
             pid_t pid=-2;
-            int job_tracker=-1;
             if(coms[i]->background)
-            pid=fork();
-            if(pid!=0){
+            {
+                  
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    job_tracker=assign_bg(pid);
+                    assign_bg(pid);
                     continue;
                 }
             }
@@ -222,14 +235,15 @@ void process_cmd(char* cmd){
                         _exit(1);
                     }
                     else{
-                        int status;
+                        int status=0;
                         waitpid(pid,&status,0);
                     }
                 }
                 else
                 reveal(coms[i]->args, 2);
                 if(pid==0){
-                    announce_bg(job_tracker);
+                    int status=0;
+                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -255,7 +269,8 @@ void process_cmd(char* cmd){
             }
             if(preverr){
                 if(pid==0){
-                    announce_bg(job_tracker);
+                    int status=0;
+                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -264,7 +279,8 @@ void process_cmd(char* cmd){
             if(j+1<coms[i]->arg_index){
                 printf("reveal: invalid syntax\n");
                 if(pid==0){
-                    announce_bg(job_tracker);
+                    int status=0;
+                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -285,7 +301,7 @@ void process_cmd(char* cmd){
                         _exit(1);
                     }
                     else{
-                        int status;
+                        int status=0;
                         waitpid(pid,&status,0);
                     }
                 }
@@ -293,7 +309,8 @@ void process_cmd(char* cmd){
                 {
                     reveal(coms[i]->args, coms[i]->arg_index);
                     if(pid==0){
-                        announce_bg(job_tracker);
+                        int status=0;
+                        announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                         _exit(0);
                     }
                 }
@@ -301,16 +318,16 @@ void process_cmd(char* cmd){
         }
         else if(strcmp(coms[i]->cmd,"peek")==0)
         {
-            pid_t pid=-2;
-            int job_tracker=-1;
-            if(coms[i]->background)
-            pid=fork();
-            if(pid!=0){
+            pid_t pid=-2;  
+            if(coms[i]->background){
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    job_tracker=assign_bg(pid);
+                    assign_bg(pid);
                     continue;
                 }
             }
@@ -337,7 +354,8 @@ void process_cmd(char* cmd){
                     }
                     printf("peek: invalid syntax\n");
                     if(pid==0){
-                        announce_bg(job_tracker);
+                        int status=0;
+                        announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                         _exit(0);
                     }
                     return;
@@ -359,7 +377,7 @@ void process_cmd(char* cmd){
                     _exit(1);
                 }
                 else{
-                    int status;
+                    int status=0;
                     waitpid(pid,&status,0);
                 }
             }
@@ -367,7 +385,8 @@ void process_cmd(char* cmd){
             {
                 peek(coms[i]->args, coms[i]->arg_index);
                 if(pid==0){
-                    announce_bg(job_tracker);
+                    int status=0;
+                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
             }
@@ -375,22 +394,24 @@ void process_cmd(char* cmd){
         else if(strcmp(coms[i]->cmd,"locate")==0)
         {
             pid_t pid=-2;
-            int job_tracker=-1;
-            if(coms[i]->background)
-            pid=fork();
-            if(pid!=0){
+            if(coms[i]->background){
+                  
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    job_tracker=assign_bg(pid);
+                    assign_bg(pid);
                     continue;
                 }
             }
             if(coms[i]->arg_index<2){
                 printf("locate: invalid syntax\n");
                 if(pid==0){
-                    announce_bg(job_tracker);
+                    int status=0;
+                    announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                     _exit(0);
                 }
                 continue;
@@ -421,7 +442,7 @@ void process_cmd(char* cmd){
                     _exit(1);
                 }
                 else{
-                    int status;
+                    int status=0;
                     waitpid(pid,&status,0);
                 }
             }
@@ -432,7 +453,8 @@ void process_cmd(char* cmd){
             }
             free(res);
             if(pid==0){
-                announce_bg(job_tracker);
+                int status=0;
+                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
@@ -440,16 +462,16 @@ void process_cmd(char* cmd){
             continue;
         }
         else{
-            pid_t pid=-2;
-            int job_tracker=-1;
-            if(coms[i]->background)
-            pid=fork();
-            if(pid!=0){
+            pid_t pid=-2;  
+            if(coms[i]->background){
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){ //otherwise you keep getting failed to create child for non bg or well fg processes
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
-                    job_tracker=assign_bg(pid);
+                    assign_bg(pid);
                     continue;
                 }
             }
@@ -463,18 +485,19 @@ void process_cmd(char* cmd){
                 _exit(1);
             }
             else{
-                int status;
+                int status=0;
                 waitpid(pid2,&status,0);
-                if (status==8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
+                if (WIFEXITED(status) && WEXITSTATUS(status) == 8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
                     if(pid==0){
-                        announce_bg(job_tracker);
+                        announce_bg(getpid(),false);
                         _exit(0);
                     }
                     break;
                 }
             }
             if(pid==0){
-                announce_bg(job_tracker);
+                int status=0;
+                announce_bg(getpid(),WIFEXITED(status) && WEXITSTATUS(status) == 0);
                 _exit(0);
             }
         }
