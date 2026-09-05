@@ -7,12 +7,15 @@
 #include<limits.h>
 #include<fcntl.h>
 #include<stdbool.h>
+#include<signal.h>
 #include "command.h"
 #include "parser.h"
 #include "bins.h"
 #include "main.h"
 extern pid_t shell_pgid;
 void assign_stopped(pid_t pid,char* cmd);
+void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd);
+void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd);
 bool builtin(char* cmd){
     if(!cmd)
     return false;
@@ -241,7 +244,7 @@ int ext_out(char **args,int *args_index,char** out,bool* append){
     *args_index=count;
     return num_out;
 }
-void piped(node** coms,int start,int end,char*home,char* prev){
+void piped(node** coms,int start,int end,char*home,char* prev,bool back){
     int num=end-start+1;
     int pipes[num][2];
     for(int k=0;k<num-1;k++){
@@ -251,8 +254,10 @@ void piped(node** coms,int start,int end,char*home,char* prev){
         }
     }
     pid_t pids[num];
+    char* cmd_names[num];
     for(int k=0;k<num;k++){
         node* cur_cmd=coms[start+k];
+        cmd_names[k]=cur_cmd->cmd;
         char *in_files[100];
         int num_in=ext_in(cur_cmd->args,&cur_cmd->arg_index,in_files);
         char*out_files[100];
@@ -270,11 +275,14 @@ void piped(node** coms,int start,int end,char*home,char* prev){
             setpgid(0,0); //for pipes that is grouped ones first is the leader the rest are just group members
             else
             setpgid(0,pids[0]);
+            signal(SIGINT,SIG_DFL);
+            signal(SIGTSTP,SIG_DFL);
+            signal(SIGTTOU,SIG_DFL);
+            if(back){
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull>=0){ dup2(devnull,STDIN_FILENO); close(devnull); }
+            }
             if(k>0){
-                if(k==0)
-                setpgid(pids[k],pids[k]);
-                else
-                setpgid(pids[k],pids[0]);
                 dup2(pipes[k-1][0],STDIN_FILENO);
             }
             if(k<num-1){
@@ -310,7 +318,10 @@ void piped(node** coms,int start,int end,char*home,char* prev){
         close(pipes[p][0]);
         close(pipes[p][1]);
     }
-        node *lead_cmd = coms[start];
+    if(back){
+        assign_bg_multi(pids,num,cmd_names,coms[start]->cmd);
+        return;
+    }
     tcsetpgrp(STDIN_FILENO, pids[0]);
     bool any_stopped=false;
     for (int k = 0; k < num; k++) {
@@ -320,6 +331,6 @@ void piped(node** coms,int start,int end,char*home,char* prev){
     }
     tcsetpgrp(STDIN_FILENO, shell_pgid);
     if(any_stopped){
-        assign_stopped(pids[0], lead_cmd->cmd);
+        assign_stopped_multi(pids,cmd_names,num,coms[start]->cmd);
     }
 }

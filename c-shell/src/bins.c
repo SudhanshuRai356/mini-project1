@@ -10,6 +10,7 @@
 #include<float.h>
 #include<time.h>
 #include "bins.h"
+#include "main.h"
 char *list;
 bool search(char*home,char*path,char*match){
     char filepath[PATH_MAX];
@@ -697,6 +698,18 @@ void peek(char**args,int len){
             }
             close(fd);
             i++;
+        }
+    }
+}
+void activities(){
+    no_longer_waiting();
+    for(int i=0;i<bg_size;i++){
+        printf("[%d] pgid %d\n",bg_list[i].job,bg_list[i].pgid);
+        for(int m=0;m<bg_list[i].num;m++){
+            if(bg_list[i].sus)
+            printf("  %d %s  Stopped\n",bg_list[i].members[m],bg_list[i].name[m]);
+            else
+            printf("  %d %s  Running\n",bg_list[i].members[m],bg_list[i].name[m]);
         }
     }
 }

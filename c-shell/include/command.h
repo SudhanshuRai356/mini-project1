@@ -8,4 +8,4 @@ int redir_in(char**in,int num);
 int redir_out(char**out,bool *append,int num);
 int ext_in(char **args,int *args_index,char** in);
 int ext_out(char **args,int *args_index,char** out,bool* append);
-void piped(node** coms,int start,int end,char*home,char* prev);
+void piped(node** coms,int start,int end,char*home,char* prev,bool background);

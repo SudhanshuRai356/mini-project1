@@ -33,6 +33,7 @@ typedef struct bg{
     bool sus;
     pid_t* members;
     int num; //this ds is getting out of handed
+    char** name;
 }bg;
 bg* bg_list;
 void assign_bg(pid_t pid,char* cmd){
@@ -43,8 +44,11 @@ void assign_bg(pid_t pid,char* cmd){
     bg_list[bg_size-1].cmd=cmd;
     bg_list[bg_size-1].pgid=pid;
     bg_list[bg_size-1].sus=false;
-    bg_list[bg_size-1].members=NULL;
+    bg_list[bg_size-1].members=malloc(sizeof(pid_t));
     bg_list[bg_size-1].num=1;
+    bg_list[bg_size-1].members[0]=pid;
+    bg_list[bg_size-1].name=malloc(sizeof(char*));
+    bg_list[bg_size-1].name[0]=cmd;
     printf("[%lld] %d\n",jobs,pid);
     jobs++;
 }
@@ -56,26 +60,79 @@ void assign_stopped(pid_t pid,char* cmd){
     bg_list[bg_size-1].cmd=cmd;
     bg_list[bg_size-1].pgid=pid;
     bg_list[bg_size-1].sus=true;
-    bg_list[bg_size-1].members=NULL;
+    bg_list[bg_size-1].members=malloc(sizeof(pid_t));
     bg_list[bg_size-1].num=1;
+    bg_list[bg_size-1].members[0]=pid;
+    bg_list[bg_size-1].name=malloc(sizeof(char*));
+    bg_list[bg_size-1].name[0]=cmd;
     printf("[%lld] + Stopped\t%s\n",jobs,cmd);
     jobs++;
 }
-void announce_bg(pid_t pid,bool stat){
-    char* name;
-    for(int i=0;i<jobs-1;i++){
-        if(bg_list[i].pid==pid){
-            name=bg_list[i].cmd;
-            memmove(&bg_list[i],&bg_list[i+1],(bg_size-i-1)*sizeof(bg));
-            bg_size--;
-            bg_list=realloc(bg_list,bg_size*sizeof(bg));
-            break;
-        }
+void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd){
+    bg_size++;
+    bg_list=realloc(bg_list,bg_size*sizeof(bg));
+    bg_list[bg_size-1].pid=pids[0];
+    bg_list[bg_size-1].job=jobs;
+    bg_list[bg_size-1].cmd=full_cmd;
+    bg_list[bg_size-1].pgid=pids[0];
+    bg_list[bg_size-1].sus=false;
+    bg_list[bg_size-1].num=num;
+    bg_list[bg_size-1].members=malloc(num*sizeof(pid_t));
+    bg_list[bg_size-1].name=malloc(num*sizeof(char*));
+    for(int i=0;i<num;i++){
+        bg_list[bg_size-1].members[i]=pids[i];
+        bg_list[bg_size-1].name[i]=names[i];
     }
+    printf("[%lld] %d\n",jobs,pids[0]);
+    jobs++;
+}
+void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd){
+    bg_size++;
+    bg_list=realloc(bg_list,bg_size*sizeof(bg));
+    bg_list[bg_size-1].pid=pids[0];
+    bg_list[bg_size-1].job=jobs;
+    bg_list[bg_size-1].cmd=full_cmd;
+    bg_list[bg_size-1].pgid=pids[0];
+    bg_list[bg_size-1].sus=true;
+    bg_list[bg_size-1].num=num;
+    bg_list[bg_size-1].members=malloc(num*sizeof(pid_t));
+    bg_list[bg_size-1].name=malloc(num*sizeof(char*));
+    for(int i=0;i<num;i++){
+        bg_list[bg_size-1].members[i]=pids[i];
+        bg_list[bg_size-1].name[i]=cmds[i];
+    }
+    printf("[%lld] + Stopped\t%s\n",jobs,full_cmd);
+    jobs++;
+}
+void announce_bg(pid_t pid,bool stat){
+    int job_idx=-1,member_idx=-1;
+    char* name=NULL;
+    for(int i=0;i<bg_size;i++){
+        for(int m=0;m<bg_list[i].num;m++){
+            if(bg_list[i].members[m]==pid){
+                job_idx=i;member_idx=m;name=bg_list[i].name[m];
+                break;
+            }
+        }
+        if(job_idx!=-1) break;
+    }
+    if(job_idx==-1) return;
     if(stat)
     printf("%s with pid %d exited normally\n",name,pid);
     else
     printf("%s with pid %d exited abnormally\n",name,pid);
+    for(int m=member_idx;m<bg_list[job_idx].num-1;m++){
+        bg_list[job_idx].members[m]=bg_list[job_idx].members[m+1];
+        bg_list[job_idx].name[m]=bg_list[job_idx].name[m+1];
+    }
+    bg_list[job_idx].num--;
+    if(bg_list[job_idx].num==0){
+        free(bg_list[job_idx].members);
+        free(bg_list[job_idx].name);
+        memmove(&bg_list[job_idx],&bg_list[job_idx+1],(bg_size-job_idx-1)*sizeof(bg));
+        bg_size--;
+        bg_list=realloc(bg_list,bg_size*sizeof(bg));
+    }
 }
 typedef struct waiting{
     pid_t pid;
@@ -194,7 +251,7 @@ void process_cmd(char* cmd){
                     }
                 }
             }
-            piped(coms,start,end,home,prev);
+            piped(coms,start,end,home,prev,coms[end]->background);
             continue; //for requirement of part c ; and & should end but this needs to be removed when starting part D
             //return;
         }
@@ -239,6 +296,9 @@ void process_cmd(char* cmd){
             }
             if (pid==0){
                 setpgid(0,0); //setting up the group pid so that we can implement it in the activites part
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
                 if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
@@ -300,6 +360,9 @@ void process_cmd(char* cmd){
             }
             if (pid==0){
                 setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 int devnull=open("/dev/null",O_RDONLY);
                 if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
@@ -378,6 +441,9 @@ void process_cmd(char* cmd){
                     pid_t pid2=fork();
                     if(pid2==0){
                         setpgid(0,0);
+                        signal(SIGINT,SIG_DFL);
+                        signal(SIGTSTP,SIG_DFL);
+                        signal(SIGTTOU,SIG_DFL);
                         if(redir_in(in_files,num_in)<0)
                         {
                             _exit(1);
@@ -425,6 +491,9 @@ void process_cmd(char* cmd){
             }
             if (pid==0){
                 setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 int devnull=open("/dev/null",O_RDONLY);
                 if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
@@ -510,6 +579,9 @@ void process_cmd(char* cmd){
             }
             if (pid==0){
                 setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 int devnull=open("/dev/null",O_RDONLY);
                 if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
@@ -536,6 +608,9 @@ void process_cmd(char* cmd){
                 pid_t pid2=fork();
                 if(pid2==0){
                     setpgid(0,0);
+                    signal(SIGINT,SIG_DFL);
+                    signal(SIGTSTP,SIG_DFL);
+                    signal(SIGTTOU,SIG_DFL);
                     if(redir_in(in_files,num_in)<0)
                     {
                         _exit(1);
@@ -568,6 +643,9 @@ void process_cmd(char* cmd){
                 _exit(0);
             }
         }
+        else if(strcmp(coms[i]->cmd,"activities")==0){
+            activities();
+        }
         else if(coms[i]->cmd==NULL){
             continue;
         }
@@ -578,6 +656,9 @@ void process_cmd(char* cmd){
             }
             if (pid==0){
                 setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 int devnull=open("/dev/null",O_RDONLY);
                 if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
@@ -605,6 +686,9 @@ void process_cmd(char* cmd){
             setpgid(pid2,pid2);
             if(pid2==0){
                 setpgid(pid2,pid2);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
                 if(redir_in(in_files,num_in)<0)
                 _exit(1);
                 if(redir_out(out_files,appends,num_out)<0)
