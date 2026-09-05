@@ -1,4 +1,6 @@
 #include "parser.h"
+#include "main.h"
+extern pid_t shell_pgid;
 bool builtin(char* cmd);
 void exec_builtin(node* com, char* home, char* prev);
 void run_cmd(char* cmd,char** args,int arg_index);

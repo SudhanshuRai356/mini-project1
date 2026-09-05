@@ -10,6 +10,7 @@
 #include<stdbool.h>
 #include<fcntl.h>
 #include<sys/wait.h>
+#include "main.h"
 #include<signal.h> //to make the signal handling since the child process in bg might sent a signal to fg to print and all that
 #include<errno.h> //to make the diiferentiation of errors easier
 #include<limits.h> //need this to get the path limits and all that otherwise the os keeps killing vscode when i do runs and hit infinite loops
@@ -21,33 +22,60 @@ char* home;
 char* user;
 char* host;
 char* prev;
+pid_t shell_pgid; // will need this to recalim the shell whenever we come out of a process
+int bg_size=0;
 long long jobs=1;
 typedef struct bg{
     pid_t pid;
     int job;
     char*cmd;
+    pid_t pgid;
+    bool sus;
+    pid_t* members;
+    int num; //this ds is getting out of handed
 }bg;
 bg* bg_list;
 void assign_bg(pid_t pid,char* cmd){
-    bg_list=realloc(bg_list,jobs*sizeof(bg));
-    bg_list[jobs-1].pid=pid;
-    bg_list[jobs-1].job=jobs;
-    bg_list[jobs-1].cmd=cmd;
+    bg_size++;
+    bg_list=realloc(bg_list,bg_size*sizeof(bg));
+    bg_list[bg_size-1].pid=pid;
+    bg_list[bg_size-1].job=jobs;
+    bg_list[bg_size-1].cmd=cmd;
+    bg_list[bg_size-1].pgid=pid;
+    bg_list[bg_size-1].sus=false;
+    bg_list[bg_size-1].members=NULL;
+    bg_list[bg_size-1].num=1;
     printf("[%lld] %d\n",jobs,pid);
     jobs++;
 }
+void assign_stopped(pid_t pid,char* cmd){
+    bg_size++;
+    bg_list=realloc(bg_list,bg_size*sizeof(bg));
+    bg_list[bg_size-1].pid=pid;
+    bg_list[bg_size-1].job=jobs;
+    bg_list[bg_size-1].cmd=cmd;
+    bg_list[bg_size-1].pgid=pid;
+    bg_list[bg_size-1].sus=true;
+    bg_list[bg_size-1].members=NULL;
+    bg_list[bg_size-1].num=1;
+    printf("[%lld] + Stopped\t%s\n",jobs,cmd);
+    jobs++;
+}
 void announce_bg(pid_t pid,bool stat){
-    int job=-1;
+    char* name;
     for(int i=0;i<jobs-1;i++){
         if(bg_list[i].pid==pid){
-            job=i;
+            name=bg_list[i].cmd;
+            memmove(&bg_list[i],&bg_list[i+1],(bg_size-i-1)*sizeof(bg));
+            bg_size--;
+            bg_list=realloc(bg_list,bg_size*sizeof(bg));
             break;
         }
     }
     if(stat)
-    printf("%s with pid %d exited normally\n",bg_list[job].cmd,pid);
+    printf("%s with pid %d exited normally\n",name,pid);
     else
-    printf("%s with pid %d exited abnormally\n",bg_list[job].cmd,pid);
+    printf("%s with pid %d exited abnormally\n",name,pid);
 }
 typedef struct waiting{
     pid_t pid;
@@ -114,6 +142,13 @@ void init_shell(){
     sigemptyset(&sa.sa_mask);
     sa.sa_flags=SA_RESTART;
     sigaction(SIGCHLD,&sa,NULL);
+    shell_pgid=getpid();
+    setpgid(shell_pgid,shell_pgid);
+    tcsetpgrp(STDIN_FILENO,shell_pgid);//claiming the shell in init
+    signal(SIGINT,SIG_IGN);  //ctrl c handled
+    signal(SIGTSTP,SIG_IGN); //ctrl z handled
+    signal(SIGTTOU,SIG_IGN); //requirement stop background writes now as well
+    signal(SIGQUIT,SIG_IGN); //since the requirement states a different way of quitting out of the shell
 }
 char* getpwd(){
     pwd=malloc(PATH_MAX * sizeof(char));
@@ -197,13 +232,15 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
+                    setpgid(pid,pid);
                     assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
             if (pid==0){
+                setpgid(0,0); //setting up the group pid so that we can implement it in the activites part
                 int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
-                if(devnull<=0){
+                if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
                     close(devnull);
                 }
@@ -213,8 +250,9 @@ void process_cmd(char* cmd){
             char* cwd=malloc(PATH_MAX * sizeof(char));
             getcwd(cwd,PATH_MAX);
             if(need_redir){
-                pid_t pid=fork();
-                if(pid==0){
+                pid_t pid2=fork();
+                if(pid2==0){
+                    setpgid(pid2,pid2);
                     if(redir_in(in_files,num_in)<0)
                     {
                         _exit(1);
@@ -228,7 +266,11 @@ void process_cmd(char* cmd){
                 }
                 else{
                     int status=0;
-                    waitpid(pid,&status,0);
+                    tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                    waitpid(pid2,&status,WUNTRACED); // to check for stop we need to use untraced and not 0 otherwise your code will not detect ctrl z even though you think it should ....
+                    tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                    if(WIFSTOPPED(status)) 
+                    assign_stopped(pid2,coms[i]->cmd);
                 }
             }
             else
@@ -244,7 +286,6 @@ void process_cmd(char* cmd){
             pid_t pid=-2;
             if(coms[i]->background)
             {
-                  
                 pid=fork();
             }
             if(pid!=0 && coms[i]->background){
@@ -252,13 +293,15 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
+                    setpgid(pid,pid);
                     assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
             if (pid==0){
+                setpgid(0,0);
                 int devnull=open("/dev/null",O_RDONLY);
-                if(devnull<=0){
+                if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
                     close(devnull);
                 }
@@ -267,8 +310,9 @@ void process_cmd(char* cmd){
                 coms[i]->args[1] = ".";
                 coms[i]->arg_index++;
                 if(need_redir){
-                    pid_t pid=fork();
-                    if(pid==0){
+                    pid_t pid2=fork();
+                    if(pid2==0){
+                        setpgid(pid2,pid2);
                         if(redir_in(in_files,num_in)<0)
                         {
                             _exit(1);
@@ -282,7 +326,11 @@ void process_cmd(char* cmd){
                     }
                     else{
                         int status=0;
-                        waitpid(pid,&status,0);
+                        tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                        waitpid(pid2,&status,WUNTRACED);
+                        tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                        if(WIFSTOPPED(status)) 
+                        assign_stopped(pid2,coms[i]->cmd);
                     }
                 }
                 else
@@ -327,8 +375,9 @@ void process_cmd(char* cmd){
             }
             else{
                 if(need_redir){
-                    pid_t pid=fork();
-                    if(pid==0){
+                    pid_t pid2=fork();
+                    if(pid2==0){
+                        setpgid(0,0);
                         if(redir_in(in_files,num_in)<0)
                         {
                             _exit(1);
@@ -342,7 +391,11 @@ void process_cmd(char* cmd){
                     }
                     else{
                         int status=0;
-                        waitpid(pid,&status,0);
+                        tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                        waitpid(pid2,&status,WUNTRACED);
+                        tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                        if(WIFSTOPPED(status)) 
+                        assign_stopped(pid2,coms[i]->cmd);
                     }
                 }
                 else
@@ -365,13 +418,15 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
+                    setpgid(pid,pid);
                     assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
             if (pid==0){
+                setpgid(0,0);
                 int devnull=open("/dev/null",O_RDONLY);
-                if(devnull<=0){
+                if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
                     close(devnull);
                 }
@@ -406,8 +461,9 @@ void process_cmd(char* cmd){
                 j++;
             }
             if(need_redir){
-                pid_t pid=fork();
-                if(pid==0){
+                pid_t pid2=fork();
+                if(pid2==0){
+                    setpgid(pid2,pid2);
                     if(redir_in(in_files,num_in)<0)
                     {
                         _exit(1);
@@ -421,7 +477,11 @@ void process_cmd(char* cmd){
                 }
                 else{
                     int status=0;
-                    waitpid(pid,&status,0);
+                    tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                    waitpid(pid2,&status,WUNTRACED);
+                    tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                    if(WIFSTOPPED(status)) 
+                    assign_stopped(pid2,coms[i]->cmd);
                 }
             }
             else
@@ -436,7 +496,6 @@ void process_cmd(char* cmd){
         {
             pid_t pid=-2;
             if(coms[i]->background){
-                  
                 pid=fork();
             }
             if(pid!=0 && coms[i]->background){
@@ -444,13 +503,15 @@ void process_cmd(char* cmd){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
+                    setpgid(pid,pid);
                     assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
             if (pid==0){
+                setpgid(0,0);
                 int devnull=open("/dev/null",O_RDONLY);
-                if(devnull<=0){
+                if(devnull>=0){
                     dup2(devnull,STDIN_FILENO);
                     close(devnull);
                 }
@@ -472,8 +533,9 @@ void process_cmd(char* cmd){
             new_args[k]=NULL;
             char* res=calloc(10000,sizeof(char));
             if(need_redir){
-                pid_t pid=fork();
-                if(pid==0){
+                pid_t pid2=fork();
+                if(pid2==0){
+                    setpgid(0,0);
                     if(redir_in(in_files,num_in)<0)
                     {
                         _exit(1);
@@ -489,7 +551,11 @@ void process_cmd(char* cmd){
                 }
                 else{
                     int status=0;
-                    waitpid(pid,&status,0);
+                    tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                    waitpid(pid2,&status,WUNTRACED);
+                    tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                    if(WIFSTOPPED(status)) 
+                    assign_stopped(pid2,coms[i]->cmd);
                 }
             }
             else
@@ -510,24 +576,35 @@ void process_cmd(char* cmd){
             if(coms[i]->background){
                 pid=fork();
             }
+            if (pid==0){
+                setpgid(0,0);
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull>=0){
+                    dup2(devnull,STDIN_FILENO);
+                    close(devnull);
+                }
+                if(redir_in(in_files,num_in)<0)
+                _exit(1);
+                if(redir_out(out_files,appends,num_out)<0)
+                _exit(1);
+                run_cmd(coms[i]->cmd,coms[i]->args,coms[i]->arg_index);
+                _exit(1);
+            }
             if(pid!=0 && coms[i]->background){ //otherwise you keep getting failed to create child for non bg or well fg processes
                 if (pid<0){
                     printf("cshell: failed to create child process\n");
                 }
                 else{
+                    setpgid(pid,pid); // even parents will need to have group id i think it mmight not be used tho
                     assign_bg(pid,coms[i]->cmd);
                     continue;
                 }
             }
-            if (pid==0){
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull<=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
-            }
             pid_t pid2=fork();
+            if(pid2>0)
+            setpgid(pid2,pid2);
             if(pid2==0){
+                setpgid(pid2,pid2);
                 if(redir_in(in_files,num_in)<0)
                 _exit(1);
                 if(redir_out(out_files,appends,num_out)<0)
@@ -537,7 +614,11 @@ void process_cmd(char* cmd){
             }
             else{
                 int status=0;
-                waitpid(pid2,&status,0);
+                tcsetpgrp(STDIN_FILENO,pid2);// giving shell to current process
+                waitpid(pid2,&status,WUNTRACED);
+                tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
+                if(WIFSTOPPED(status)) 
+                assign_stopped(pid2,coms[i]->cmd);
                 if (WIFEXITED(status) && WEXITSTATUS(status) == 8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
                     if(pid==0){
                         _exit(0);

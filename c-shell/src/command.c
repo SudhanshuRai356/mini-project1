@@ -10,6 +10,9 @@
 #include "command.h"
 #include "parser.h"
 #include "bins.h"
+#include "main.h"
+extern pid_t shell_pgid;
+void assign_stopped(pid_t pid,char* cmd);
 bool builtin(char* cmd){
     if(!cmd)
     return false;
@@ -256,8 +259,22 @@ void piped(node** coms,int start,int end,char*home,char* prev){
         bool appends[100];
         int num_out=ext_out(cur_cmd->args,&cur_cmd->arg_index,out_files,appends);
         pids[k]=fork();
+        if(pids[k]>0){
+            if(k==0)
+            setpgid(pids[k],pids[k]);
+            else
+            setpgid(pids[k],pids[0]);
+        }
         if(pids[k]==0){
+            if(k==0)
+            setpgid(0,0); //for pipes that is grouped ones first is the leader the rest are just group members
+            else
+            setpgid(0,pids[0]);
             if(k>0){
+                if(k==0)
+                setpgid(pids[k],pids[k]);
+                else
+                setpgid(pids[k],pids[0]);
                 dup2(pipes[k-1][0],STDIN_FILENO);
             }
             if(k<num-1){
@@ -293,8 +310,16 @@ void piped(node** coms,int start,int end,char*home,char* prev){
         close(pipes[p][0]);
         close(pipes[p][1]);
     }
+        node *lead_cmd = coms[start];
+    tcsetpgrp(STDIN_FILENO, pids[0]);
+    bool any_stopped=false;
     for (int k = 0; k < num; k++) {
         int status;
-        waitpid(pids[k], &status, 0);
+        waitpid(pids[k], &status, WUNTRACED);
+        if(WIFSTOPPED(status)) any_stopped=true;
+    }
+    tcsetpgrp(STDIN_FILENO, shell_pgid);
+    if(any_stopped){
+        assign_stopped(pids[0], lead_cmd->cmd);
     }
 }
