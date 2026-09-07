@@ -848,3 +848,61 @@ void resume(char** args, int arg_index){
         printf("resume: invalid syntax\n");
     }
 }
+void ping(char** args,int arg_index){
+    if(arg_index!=3){
+        printf("ping: invalid syntax\n");
+        return;
+    }
+    if(args[1][0]=='%'){
+        char* end;
+        long long job_num=strtol(args[1]+1,&end,10);
+        if(*end!='\0'){
+            printf("ping: invalid syntax\n");
+            return;
+        }
+        int job=-1;
+        for(int i=0;i<bg_size;i++){
+            if(bg_list[i].job==job_num){
+                job=i;
+                break;
+            }
+        }
+        if(job==-1){
+            printf("ping: no such process found\n");
+            return;
+        }
+        char* end2;
+        long long signal_num=strtol(args[2],&end2,10);
+        if(*end2!='\0'){
+            printf("ping: invalid syntax\n");
+            return;
+        }
+        printf("Sent signal %lld to %%%lld\n",signal_num,job_num);
+    }
+    else{
+        char*end;
+        long long pid=strtol(args[1],&end,10);
+        if(*end!='\0'){
+            printf("ping: invalid syntax\n");
+            return;
+        }
+        long long proce=-1;
+        for(int i=0;i<bg_size;i++){
+            if(bg_list[i].pid==pid){
+                proce=i;
+                break;
+            }
+        }
+        if(proce==-1){
+            printf("ping: no such process found\n");
+            return;
+        }
+        char* end2;
+        long long signal_num=strtol(args[2],&end2,10);
+        if(*end2!='\0'){
+            printf("ping: invalid syntax\n");
+            return;
+        }
+        printf("Sent signal %lld to %lld\n",signal_num,pid);
+    }
+}

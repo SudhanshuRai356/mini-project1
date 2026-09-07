@@ -674,6 +674,9 @@ void process_cmd(char* cmd){
         else if(strcmp(coms[i]->cmd,"resume")==0){
             resume(coms[i]->args,coms[i]->arg_index);
         }
+        else if(strcmp(coms[i]->cmd,"ping")==0){
+            ping(coms[i]->args,coms[i]->arg_index);
+        }
         else if(coms[i]->cmd==NULL){
             continue;
         }
