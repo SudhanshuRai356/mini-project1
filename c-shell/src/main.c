@@ -34,9 +34,10 @@ typedef struct bg{
     pid_t* members;
     int num; //this ds is getting out of handed
     char** name;
+    char** full_cmd; //resume wants to print the full command
 }bg;
 bg* bg_list;
-void assign_bg(pid_t pid,char* cmd){
+void assign_bg(pid_t pid,char* cmd,char** args){
     bg_size++;
     bg_list=realloc(bg_list,bg_size*sizeof(bg));
     bg_list[bg_size-1].pid=pid;
@@ -49,10 +50,11 @@ void assign_bg(pid_t pid,char* cmd){
     bg_list[bg_size-1].members[0]=pid;
     bg_list[bg_size-1].name=malloc(sizeof(char*));
     bg_list[bg_size-1].name[0]=cmd;
+    bg_list[bg_size-1].full_cmd=args;
     printf("[%lld] %d\n",jobs,pid);
     jobs++;
 }
-void assign_stopped(pid_t pid,char* cmd){
+void assign_stopped(pid_t pid,char* cmd,char** args){
     bg_size++;
     bg_list=realloc(bg_list,bg_size*sizeof(bg));
     bg_list[bg_size-1].pid=pid;
@@ -65,10 +67,11 @@ void assign_stopped(pid_t pid,char* cmd){
     bg_list[bg_size-1].members[0]=pid;
     bg_list[bg_size-1].name=malloc(sizeof(char*));
     bg_list[bg_size-1].name[0]=cmd;
+    bg_list[bg_size-1].full_cmd=args;
     printf("[%lld] + Stopped\t%s\n",jobs,cmd);
     jobs++;
 }
-void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd){
+void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd,char** args){
     bg_size++;
     bg_list=realloc(bg_list,bg_size*sizeof(bg));
     bg_list[bg_size-1].pid=pids[0];
@@ -83,10 +86,11 @@ void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd){
         bg_list[bg_size-1].members[i]=pids[i];
         bg_list[bg_size-1].name[i]=names[i];
     }
+    bg_list[bg_size-1].full_cmd=args;
     printf("[%lld] %d\n",jobs,pids[0]);
     jobs++;
 }
-void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd){
+void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd,char** args){
     bg_size++;
     bg_list=realloc(bg_list,bg_size*sizeof(bg));
     bg_list[bg_size-1].pid=pids[0];
@@ -101,6 +105,7 @@ void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd){
         bg_list[bg_size-1].members[i]=pids[i];
         bg_list[bg_size-1].name[i]=cmds[i];
     }
+    bg_list[bg_size-1].full_cmd=args;
     printf("[%lld] + Stopped\t%s\n",jobs,full_cmd);
     jobs++;
 }
@@ -133,6 +138,9 @@ void announce_bg(pid_t pid,bool stat){
         bg_size--;
         bg_list=realloc(bg_list,bg_size*sizeof(bg));
     }
+}
+void alarm_handler(int sig){ //apparently the alarm just kills the process it is called from so i need to just be able to accept it here even if this does nothing
+    (void) sig;
 }
 typedef struct waiting{
     pid_t pid;
@@ -211,6 +219,11 @@ void init_shell(){
     sigemptyset(&sa.sa_mask);
     sa.sa_flags=SA_RESTART;
     sigaction(SIGCHLD,&sa,NULL);
+    struct sigaction sa2={0}; //sa2 part is llm generated code but essentially what it is doing is it is attaching a function for internal signals which is alarm handler here so that when we get the sigalrm signal we can actually take it and handle it instead of just dying off
+    sa2.sa_handler=alarm_handler;
+    sigemptyset(&sa2.sa_mask);
+    sa2.sa_flags=0;
+    sigaction(SIGALRM,&sa2,NULL);
     shell_pgid=getpid();
     setpgid(shell_pgid,shell_pgid);
     tcsetpgrp(STDIN_FILENO,shell_pgid);//claiming the shell in init
@@ -302,7 +315,7 @@ void process_cmd(char* cmd){
                 }
                 else{
                     setpgid(pid,pid);
-                    assign_bg(pid,coms[i]->cmd);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
                     continue;
                 }
             }
@@ -342,7 +355,7 @@ void process_cmd(char* cmd){
                     waitpid(pid2,&status,WUNTRACED); // to check for stop we need to use untraced and not 0 otherwise your code will not detect ctrl z even though you think it should ....
                     tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                     if(WIFSTOPPED(status)) 
-                    assign_stopped(pid2,coms[i]->cmd);
+                    assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                 }
             }
             else
@@ -366,7 +379,7 @@ void process_cmd(char* cmd){
                 }
                 else{
                     setpgid(pid,pid);
-                    assign_bg(pid,coms[i]->cmd);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
                     continue;
                 }
             }
@@ -405,7 +418,7 @@ void process_cmd(char* cmd){
                         waitpid(pid2,&status,WUNTRACED);
                         tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                         if(WIFSTOPPED(status)) 
-                        assign_stopped(pid2,coms[i]->cmd);
+                        assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                     }
                 }
                 else
@@ -473,7 +486,7 @@ void process_cmd(char* cmd){
                         waitpid(pid2,&status,WUNTRACED);
                         tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                         if(WIFSTOPPED(status)) 
-                        assign_stopped(pid2,coms[i]->cmd);
+                        assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                     }
                 }
                 else
@@ -497,7 +510,7 @@ void process_cmd(char* cmd){
                 }
                 else{
                     setpgid(pid,pid);
-                    assign_bg(pid,coms[i]->cmd);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
                     continue;
                 }
             }
@@ -562,7 +575,7 @@ void process_cmd(char* cmd){
                     waitpid(pid2,&status,WUNTRACED);
                     tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                     if(WIFSTOPPED(status)) 
-                    assign_stopped(pid2,coms[i]->cmd);
+                    assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                 }
             }
             else
@@ -585,7 +598,7 @@ void process_cmd(char* cmd){
                 }
                 else{
                     setpgid(pid,pid);
-                    assign_bg(pid,coms[i]->cmd);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
                     continue;
                 }
             }
@@ -642,7 +655,7 @@ void process_cmd(char* cmd){
                     waitpid(pid2,&status,WUNTRACED);
                     tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                     if(WIFSTOPPED(status)) 
-                    assign_stopped(pid2,coms[i]->cmd);
+                    assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                 }
             }
             else
@@ -657,6 +670,9 @@ void process_cmd(char* cmd){
         }
         else if(strcmp(coms[i]->cmd,"activities")==0){
             activities();
+        }
+        else if(strcmp(coms[i]->cmd,"resume")==0){
+            resume(coms[i]->args,coms[i]->arg_index);
         }
         else if(coms[i]->cmd==NULL){
             continue;
@@ -689,7 +705,7 @@ void process_cmd(char* cmd){
                 }
                 else{
                     setpgid(pid,pid); // even parents will need to have group id i think it mmight not be used tho
-                    assign_bg(pid,coms[i]->cmd);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
                     continue;
                 }
             }
@@ -714,7 +730,7 @@ void process_cmd(char* cmd){
                 waitpid(pid2,&status,WUNTRACED);
                 tcsetpgrp(STDIN_FILENO,shell_pgid); //give back terminal to the shell
                 if(WIFSTOPPED(status)) 
-                assign_stopped(pid2,coms[i]->cmd);
+                assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
                 if (WIFEXITED(status) && WEXITSTATUS(status) == 8){ // checking the exact command not found error and breaking, there is no rhyme and reason to use 8 just wanted to i guess
                     if(pid==0){
                         _exit(0);

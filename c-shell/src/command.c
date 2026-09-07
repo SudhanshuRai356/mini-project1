@@ -13,9 +13,9 @@
 #include "bins.h"
 #include "main.h"
 extern pid_t shell_pgid;
-void assign_stopped(pid_t pid,char* cmd);
-void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd);
-void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd);
+void assign_stopped(pid_t pid,char* cmd,char** args);
+void assign_bg_multi(pid_t* pids,int num,char** names,char* full_cmd,char** args);
+void assign_stopped_multi(pid_t* pids,char** cmds,int num,char* full_cmd,char** args);
 bool builtin(char* cmd){
     if(!cmd)
     return false;
@@ -319,7 +319,7 @@ void piped(node** coms,int start,int end,char*home,char* prev,bool back){
         close(pipes[p][1]);
     }
     if(back){
-        assign_bg_multi(pids,num,cmd_names,coms[start]->cmd);
+        assign_bg_multi(pids,num,cmd_names,coms[start]->cmd,coms[start]->args);
         return;
     }
     tcsetpgrp(STDIN_FILENO, pids[0]);
@@ -331,6 +331,6 @@ void piped(node** coms,int start,int end,char*home,char* prev,bool back){
     }
     tcsetpgrp(STDIN_FILENO, shell_pgid);
     if(any_stopped){
-        assign_stopped_multi(pids,cmd_names,num,coms[start]->cmd);
+        assign_stopped_multi(pids,cmd_names,num,coms[start]->cmd,coms[start]->args);
     }
 }

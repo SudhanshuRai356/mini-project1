@@ -5,6 +5,9 @@
 #include<dirent.h> // i guess even if the directory is posix it does not need to have everything its non posix variantttt had so retarded
 #include<sys/stat.h> //stackoverflow recommended swap for d_type
 #include<stdbool.h>
+#include<signal.h>
+#include<errno.h>
+#include<sys/wait.h>
 #include <limits.h>
 #include<fcntl.h>
 #include<float.h>
@@ -12,6 +15,7 @@
 #include "bins.h"
 #include "main.h"
 char *list;
+extern pid_t shell_pgid;
 bool search(char*home,char*path,char*match){
     char filepath[PATH_MAX];
     snprintf(filepath,PATH_MAX,"%s/frerency",home);
@@ -711,5 +715,136 @@ void activities(){
             else
             printf("  %d %s  Running\n",bg_list[i].members[m],bg_list[i].name[m]);
         }
+    }
+}
+void resume(char** args, int arg_index){
+    if(arg_index<3|| args[1][0]!='%'){
+        printf("resume: invalid syntax\n");
+        return;
+    }
+    char* end;
+    long long job_num=strtol(args[1]+1,&end,10);
+    if(*end!='\0'){
+        printf("resume: invalid syntax\n");
+        return;
+    }
+    int job=-1;
+    for(int i=0;i<bg_size;i++){
+        if(bg_list[i].job==job_num){
+            job=i;
+            break;
+        }
+    }
+    if(job==-1){
+        printf("resume: no such job\n");
+        return;
+    }
+    if(strcmp(args[2],"bg")==0){
+        if(arg_index!=3){
+            printf("resume: invalid syntax\n");
+            return;
+        }
+        killpg(bg_list[job].pgid,SIGCONT); // i just wanna say the function name kinda ironic made me read unix history
+        bg_list[job].sus=false;
+        printf("[%d] + Running\t",bg_list[job].job);
+        for(int i=0;bg_list[job].full_cmd[i]!=NULL;i++){
+            printf("%s ",bg_list[job].full_cmd[i]);
+        }
+        printf("\n");
+        return;
+    }
+    else if(strcmp(args[2],"fg")==0){
+        if(arg_index>3){
+            if(arg_index!=5){
+                printf("resume: invalid syntax\n");
+                return;
+            }
+            if(strcmp(args[3],"--timeout")!=0){
+                printf("resume: invalid syntax\n");
+                return;
+            }
+            char* num_end;
+            long long timeout=(int)strtol(args[4],&num_end,10);
+            if(*num_end!='\0'||timeout<=0){
+                printf("resume: invalid syntax\n");
+                return;
+            }
+            for(int i=0;bg_list[job].full_cmd[i]!=NULL;i++){
+                printf("%s ",bg_list[job].full_cmd[i]);
+            }
+            printf("\n");
+            pid_t pgid=bg_list[job].pgid;
+            int num=bg_list[job].num;
+            pid_t members[num];
+            memcpy(members,bg_list[job].members,num*sizeof(pid_t));
+            bg_list[job].sus=false;
+            killpg(pgid,SIGCONT);
+            tcsetpgrp(STDIN_FILENO,pgid);
+            alarm((unsigned int)timeout); //welp alarm does not take longlong and i am not changing the above long long
+            bool timed=false;
+            bool stopped=false;
+            for(int m=0;m<num;m++){
+                int status;
+                pid_t r=waitpid(members[m],&status,WUNTRACED);
+                if(r<0 && errno==EINTR){ 
+                    timed=true; 
+                    break; 
+                }
+                if(WIFSTOPPED(status)) 
+                stopped=true;
+            }
+            alarm(0); //needed other wise even with an interrupt it just rings an alarm out of nowhere in some other process
+            if(timed){
+                killpg(pgid,SIGTERM);
+                printf("resume: job timed out\n");
+            }
+            tcsetpgrp(STDIN_FILENO,shell_pgid);
+            if(!timed){
+                if(stopped){
+                    bg_list[job].sus=true;
+                }
+                else{
+                    free(bg_list[job].members);
+                    free(bg_list[job].name);
+                    memmove(&bg_list[job],&bg_list[job+1],(bg_size-job-1)*sizeof(bg));
+                    bg_size--;
+                    bg_list=realloc(bg_list,bg_size*sizeof(bg));
+                }
+            }
+        }
+        else{
+            for(int i=0;bg_list[job].full_cmd[i]!=NULL;i++){
+                printf("%s ",bg_list[job].full_cmd[i]);
+            }
+            printf("\n");
+            pid_t pgid=bg_list[job].pgid;
+            int num=bg_list[job].num;
+            pid_t members[num];
+            memcpy(members,bg_list[job].members,num*sizeof(pid_t));
+            bg_list[job].sus=false;
+            killpg(pgid,SIGCONT);
+            tcsetpgrp(STDIN_FILENO,pgid);
+            bool stopped=false;
+            for(int m=0;m<num;m++){
+                int status;
+                waitpid(members[m],&status,WUNTRACED);
+                if(WIFSTOPPED(status)) 
+                stopped=true;
+            }
+            tcsetpgrp(STDIN_FILENO,shell_pgid);
+            if(stopped){
+                bg_list[job].sus=true;
+            }
+            else{
+                free(bg_list[job].members);
+                free(bg_list[job].name);
+                memmove(&bg_list[job],&bg_list[job+1],(bg_size-job-1)*sizeof(bg));
+                bg_size--;
+                bg_list=realloc(bg_list,bg_size*sizeof(bg));
+            }
+        }
+    }
+    else{
+        printf("resume: invalid syntax\n");
     }
 }

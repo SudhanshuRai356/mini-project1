@@ -1037,3 +1037,10 @@ i want to know why exactly why code is printing out the issue even when i am usi
 
 ![alt text](image-17.png)
 ![alt text](image-18.png)
+### Prompt 7
+```
+So i tried to implement the resume function by iterativly finding the job and then calling and alarm with the time limit given for timeout, the fg abd bg normally work fine but when i use the timeout the shell itself just dies after the timer is there an issue in the way i am handling the timer, explain to me why the code seems to just break, i have attached the files of the project in this message
+```
+![alt text](image-19.png)
+![alt text](image-20.png)
+![alt text](image-21.png)
