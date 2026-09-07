@@ -165,6 +165,18 @@ void plant(int sig){ //since it will kill zombies, you know pvz reference
     }
     errno=err_no;
 }
+bool ctrld1(){
+    for(int i=0;i<bg_size;i++){
+        if(bg_list[i].sus==true)
+        return true;
+    }
+    return false;
+}
+void ctrld2(){
+    for(int i=0;i<bg_size;i++){
+        killpg(bg_list[i].pgid,SIGHUP);
+    }
+}
 void prevdir(){
     prev=calloc(PATH_MAX,sizeof(char)); //just initialsing prev and will do this once could have been in init shell but oh well
     return;
@@ -720,6 +732,7 @@ void process_cmd(char* cmd){
 int main(){
     init_shell();
     prevdir();
+    bool ctrld=false;
     while(1){
         no_longer_waiting();
         getpwd();
@@ -731,8 +744,16 @@ int main(){
         if(fgets(cmd,1026,stdin) == NULL){ // i truly hate fgets but in scanf when i just hit enter i produced garbage values so i have to use this
             free(cmd); // to stop the terminal from breaking when i use ctrl d given the result by claude
             printf("\n");
+            if(ctrld1() && !ctrld){
+                printf("cshell: there are stopped jobs\n");
+                ctrld=true;
+                clearerr(stdin); //fgets does not eat up the eof and it just exits after printing the there are stopped jobs thingy now it should work
+                continue;
+            }
+            ctrld2();
             break;
         }
+        ctrld=false;
         cmd[strcspn(cmd, "\n")] = 0; // remove the trailing newline character
         if(strlen(cmd)==0){
             free(cmd);
