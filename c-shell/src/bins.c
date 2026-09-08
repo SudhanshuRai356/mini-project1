@@ -990,6 +990,7 @@ void spy(char** args,int arg_index){
                     printf("%d\tmem\tREG\t%s\n",pid,path);
                 }
             }
+            fclose(mps);// was just opening and it started clonning each one realised i never 
         }
         char fd[PATH_MAX];
         snprintf(fd,PATH_MAX,"/proc/%d/fd",pid);
