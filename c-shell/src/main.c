@@ -324,11 +324,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
-                if(devnull>=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
+                signal(SIGTTIN,SIG_IGN);// thought i found such a cool way to stop this, then dicussing with friends ends up this is not the implementation expected
+                // int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
+                // if(devnull>=0){
+                //     dup2(devnull,STDIN_FILENO);
+                //     close(devnull);
+                // }
             }
             bool changed=false;
             char* ccwd=calloc(PATH_MAX,sizeof(char));
@@ -388,11 +389,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){
+                //     dup2(devnull,STDIN_FILENO);
+                //     close(devnull);
+                // }
             }
             if (coms[i]->args[1] == NULL) {
                 coms[i]->args[1] = ".";
@@ -519,11 +521,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){
+                //     dup2(devnull,STDIN_FILENO);
+                //     close(devnull);
+                // }
             }
             if(coms[i]->arg_index<2){
                 coms[i]->args[1]="-";
@@ -607,11 +610,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){
+                //     dup2(devnull,STDIN_FILENO);
+                //     close(devnull);
+                // }
             }
             if(coms[i]->arg_index<2){
                 printf("locate: invalid syntax\n");
@@ -688,8 +692,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){ dup2(devnull,STDIN_FILENO); close(devnull); }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){ 
+                //     dup2(devnull,STDIN_FILENO); 
+                //     close(devnull); 
+                // }
             }
             if(need_redir){
                 pid_t pid2=fork();
@@ -761,8 +769,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){ dup2(devnull,STDIN_FILENO); close(devnull); }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){ 
+                //     dup2(devnull,STDIN_FILENO); 
+                //     close(devnull);
+                // }
             }
             if(need_redir){
                 pid_t pid2=fork();
@@ -808,8 +820,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){ dup2(devnull,STDIN_FILENO); close(devnull); }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){ 
+                //     dup2(devnull,STDIN_FILENO); 
+                //     close(devnull); 
+                // }
             }
             if(need_redir){
                 pid_t pid2=fork();
@@ -835,6 +851,52 @@ void process_cmd(char* cmd){
                 _exit(0);
             }
         }
+        else if(strcmp(coms[i]->cmd,"snoop")==0){
+            pid_t pid=-2;
+            if(coms[i]->background){
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){
+                if(pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    setpgid(pid,pid);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
+                    continue;
+                }
+            }
+            if(pid==0){
+                setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
+                signal(SIGTTIN,SIG_IGN);
+            }
+            if(need_redir){
+                pid_t pid2=fork();
+                if(pid2==0){
+                    setpgid(pid2,pid2);
+                    if(redir_in(in_files,num_in)<0) _exit(1);
+                    if(redir_out(out_files,appends,num_out)<0) _exit(1);
+                    snoop(coms[i]->args,coms[i]->arg_index);
+                    _exit(0);
+                }
+                else{
+                    int status=0;
+                    tcsetpgrp(STDIN_FILENO,pid2);
+                    waitpid(pid2,&status,WUNTRACED);
+                    tcsetpgrp(STDIN_FILENO,shell_pgid);
+                    if(WIFSTOPPED(status))
+                    assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
+                }
+            }
+            else
+            snoop(coms[i]->args,coms[i]->arg_index);
+            if(pid==0){
+                _exit(0);
+            }
+        }
         else if(coms[i]->cmd==NULL){
             continue;
         }
@@ -848,11 +910,12 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                int devnull=open("/dev/null",O_RDONLY);
-                if(devnull>=0){
-                    dup2(devnull,STDIN_FILENO);
-                    close(devnull);
-                }
+                signal(SIGTTIN,SIG_IGN);
+                // int devnull=open("/dev/null",O_RDONLY);
+                // if(devnull>=0){
+                //     dup2(devnull,STDIN_FILENO);
+                //     close(devnull);
+                // }
                 if(redir_in(in_files,num_in)<0)
                 _exit(1);
                 if(redir_out(out_files,appends,num_out)<0)

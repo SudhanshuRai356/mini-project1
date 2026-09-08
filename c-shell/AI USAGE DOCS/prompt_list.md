@@ -1044,3 +1044,11 @@ So i tried to implement the resume function by iterativly finding the job and th
 ![alt text](image-19.png)
 ![alt text](image-20.png)
 ![alt text](image-21.png)
+
+### Prompt 8
+```
+give me a look up table fuunction with all reasonably "common" syscalls, it should take in the syscall number and return the name of the syscall if the syscall is not in the lookup return the a string in format syscall_N, where N is the syscall number also how would i attach ptrace to some process like ptrace on a pid is fine but how would the snoop command [arg] work with the ptrace, i have added the current snoop implemenation here
+```
+
+![alt text](image-22.png)
+![alt text](image-23.png)

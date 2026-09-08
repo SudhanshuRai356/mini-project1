@@ -12,10 +12,70 @@
 #include<fcntl.h>
 #include<float.h>
 #include<time.h>
+#include<sys/ptrace.h>
+#include<sys/user.h>
+#include<time.h>
 #include "bins.h"
 #include "main.h"
 char *list;
 extern pid_t shell_pgid;
+char* lookup(long num){
+    switch(num){
+        case 0: return "read";
+        case 1: return "write";
+        case 2: return "open";
+        case 3: return "close";
+        case 4: return "stat";
+        case 5: return "fstat";
+        case 6: return "lstat";
+        case 8: return "lseek";
+        case 9: return "mmap";
+        case 10: return "mprotect";
+        case 11: return "munmap";
+        case 12: return "brk";
+        case 13: return "rt_sigaction";
+        case 14: return "rt_sigprocmask";
+        case 16: return "ioctl";
+        case 21: return "access";
+        case 22: return "pipe";
+        case 32: return "dup";
+        case 33: return "dup2";
+        case 35: return "nanosleep";
+        case 39: return "getpid";
+        case 59: return "execve";
+        case 60: return "exit";
+        case 61: return "wait4";
+        case 62: return "kill";
+        case 72: return "fcntl";
+        case 79: return "getcwd";
+        case 89: return "readlink";
+        case 96: return "gettimeofday";
+        case 97: return "getrlimit";
+        case 102: return "getuid";
+        case 104: return "getgid";
+        case 107: return "geteuid";
+        case 108: return "getegid";
+        case 158: return "arch_prctl";
+        case 202: return "futex";
+        case 231: return "exit_group";
+        case 257: return "openat";
+        case 262: return "newfstatat";
+        case 273: return "set_robust_list";
+        case 302: return "prlimit64";
+        case 318: return "getrandom";
+        case 334: return "rseq";
+        default: 
+        char* unknown=malloc(20*sizeof(char));
+        snprintf(unknown,20,"unknown(%ld)",num);
+        return unknown;
+    }
+}
+typedef struct syscalls{
+    long num;
+    long calls;
+    double tt;
+    long first;
+}syscalls;
 bool search(char*home,char*path,char*match){
     char filepath[PATH_MAX];
     snprintf(filepath,PATH_MAX,"%s/frerency",home);
@@ -1190,5 +1250,118 @@ void spy(char** args,int arg_index){
                 printf("%d\t%d\t%s\t%s\n",pid,fds[i],type,buff);   
             }
         }
+    }
+}
+void snoop(char** args,int arg_index){
+    pid_t pid;
+    if(arg_index>=3 && strcmp(args[1],"-p")==0){
+        char*end;
+        long l=strtol(args[2],&end,10);
+        if(*end!='\0' || l<0){
+            printf("snoop: no such process\n");
+            return;
+        }
+        pid=(pid_t)l;
+        char path[PATH_MAX];
+        snprintf(path,PATH_MAX,"/proc/%d",pid);
+        struct stat path_stat;
+        if(stat(path,&path_stat)<0){
+            printf("snoop: no such process\n");
+            return;
+        }
+        if(ptrace(PTRACE_ATTACH, pid, NULL, NULL)<0) {
+            printf("snoop: no such process\n");
+            return;
+        }
+        int status;
+        waitpid(pid,&status,0);
+    }
+    else if(arg_index>=2){
+        pid=fork();
+        if(pid==0){
+            ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+            execvp(args[1], args+1);
+            _exit(127);
+        }
+        int status;
+        waitpid(pid,&status,0);
+        if(WIFEXITED(status)&&WEXITSTATUS(status)==127){
+            printf("snoop: command not found\n");
+            return;
+        }
+    }
+    else{
+        printf("snoop: invalid syntax\n");
+        return;
+    }
+    ptrace(PTRACE_SETOPTIONS,pid,NULL,(void*)PTRACE_O_TRACESYSGOOD);// now this is where the actual tracing starts tracesysgood just puts a flag that lets the ptrace know if the program has been blocked or been put on hold due to some other syscall//it asks for a void type hence had to typecast
+    syscalls info[1024]; //just gonna limit to 1024 syscalls since i don't think any process will have more than that
+    int num=0;
+    bool in_syscall=false;
+    long cur=-1;
+    struct timespec entry_time;
+    long order=0;
+    long pending=0;
+    while(true){
+        if(ptrace(PTRACE_SYSCALL,pid,NULL,(void*)pending)<0) //making sure there are no pending syscalls if there are this tally part is not gonna run and it will wait for a signal till the syscall is done then it will continue
+        break;
+        pending=0;
+        int status;
+        if(waitpid(pid,&status,0)<0)
+        break;
+        if(WIFEXITED(status)||WIFSIGNALED(status))
+        break;
+        if(!WIFSTOPPED(status))
+        continue;
+        int sig=WSTOPSIG(status);
+        if(sig != (SIGTRAP|0x80)){
+            pending=sig;
+            continue;
+        }
+        struct user_regs_struct regs;
+        ptrace(PTRACE_GETREGS,pid,NULL,&regs);//added all the regs of the process to my struct 
+        long syscall_N=regs.orig_rax; //orig_rax is the register that holds the syscall number
+        struct timespec cur_time;
+        clock_gettime(CLOCK_MONOTONIC,&cur_time);// this is for the the amount of time ran thingy
+        if(!in_syscall){
+            in_syscall=true;
+            cur=syscall_N;
+            entry_time=cur_time;
+        }
+        else{
+            double passed=(cur_time.tv_sec-entry_time.tv_sec)+(cur_time.tv_nsec-entry_time.tv_nsec)/1000000000.0; //nano sec is 10^9
+            int id=-1;
+            for(int i=0;i<num;i++){
+                if(info[i].num==cur){
+                    id=i;
+                    break;
+                }
+            }
+            if(id==-1 && num<1024){
+                info[num].num=cur;
+                info[num].calls=0;
+                info[num].tt=0;
+                info[num].first=++order;
+                id=num++;
+            }
+            else if(id!=-1){
+                info[id].calls++;
+                info[id].tt+=passed;
+            }
+            in_syscall=false;
+        }
+    }
+    for(int i=0;i<num;i++){
+        syscalls k=info[i];
+        int j=i-1;
+        while(j>=0&&(info[j].calls<k.calls||(info[j].calls==k.calls&&info[j].first>k.first))){ //another insertion sort
+            info[j+1]=info[j];
+            j--;
+        }
+        info[j+1]=k;
+    }
+    printf("syscall\t\tcalls\ttime\n");
+    for(int i=0;i<num;i++){
+        printf("%s\t\t%ld\t%.6f\n",lookup(info[i].num),info[i].calls,info[i].tt);
     }
 }
