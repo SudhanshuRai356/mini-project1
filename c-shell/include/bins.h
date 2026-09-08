@@ -9,6 +9,7 @@ void peek(char**args,int len);
 void activities();
 void resume(char** args, int arg_index);
 void ping(char** args,int arg_index);
+void spy(char** args,int arg_index);
 typedef struct element{
     char path[PATH_MAX];
     int  score;

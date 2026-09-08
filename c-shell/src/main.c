@@ -788,6 +788,53 @@ void process_cmd(char* cmd){
                 _exit(0);
             }
         }
+        else if(strcmp(coms[i]->cmd,"spy")==0){
+            pid_t pid=-2;
+            if(coms[i]->background){
+                pid=fork();
+            }
+            if(pid!=0 && coms[i]->background){
+                if(pid<0){
+                    printf("cshell: failed to create child process\n");
+                }
+                else{
+                    setpgid(pid,pid);
+                    assign_bg(pid,coms[i]->cmd,coms[i]->args);
+                    continue;
+                }
+            }
+            if(pid==0){
+                setpgid(0,0);
+                signal(SIGINT,SIG_DFL);
+                signal(SIGTSTP,SIG_DFL);
+                signal(SIGTTOU,SIG_DFL);
+                int devnull=open("/dev/null",O_RDONLY);
+                if(devnull>=0){ dup2(devnull,STDIN_FILENO); close(devnull); }
+            }
+            if(need_redir){
+                pid_t pid2=fork();
+                if(pid2==0){
+                    setpgid(pid2,pid2);
+                    if(redir_in(in_files,num_in)<0) _exit(1);
+                    if(redir_out(out_files,appends,num_out)<0) _exit(1);
+                    spy(coms[i]->args,coms[i]->arg_index);
+                    _exit(0);
+                }
+                else{
+                    int status=0;
+                    tcsetpgrp(STDIN_FILENO,pid2);
+                    waitpid(pid2,&status,WUNTRACED);
+                    tcsetpgrp(STDIN_FILENO,shell_pgid);
+                    if(WIFSTOPPED(status))
+                    assign_stopped(pid2,coms[i]->cmd,coms[i]->args);
+                }
+            }
+            else
+            spy(coms[i]->args,coms[i]->arg_index);
+            if(pid==0){
+                _exit(0);
+            }
+        }
         else if(coms[i]->cmd==NULL){
             continue;
         }

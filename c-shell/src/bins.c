@@ -906,3 +906,288 @@ void ping(char** args,int arg_index){
         printf("Sent signal %lld to %lld\n",signal_num,pid);
     }
 }
+void spy(char** args,int arg_index){
+    if(arg_index>2){
+        printf("spy: invalid syntax\n");
+        return;
+    }
+    if(arg_index==1){
+        pid_t pid=getpid();
+        if(kill(pid,0)<0){
+            if(errno==ESRCH){ //this extra check because from my previous deep dive on kill i know that the only time it will return an neg value is for either process not found or i do not have persmission to read
+                printf("spy: no such process\n");
+                return;
+            }
+        }
+        char* path;
+        path=calloc(PATH_MAX,sizeof(char));//not gonna risk the malloc garbage memory even tho no reason for that to happen here
+        snprintf(path,PATH_MAX,"/proc/%d",pid);
+        struct stat path_stat;
+        if(stat(path,&path_stat)<0){
+            printf("spy: no such process\n");
+            free(path);
+            return;
+        }
+        printf("PID\tFD\tTYPE\tPATH\n");
+        char cwd[PATH_MAX];
+        snprintf(cwd,PATH_MAX,"/proc/%d/cwd",pid);
+        ssize_t len;
+        char buff[PATH_MAX]={0};
+        len=readlink(cwd,buff,PATH_MAX-1); //since the values in the proc folder are symlinks can't be reading them normally
+        if(len>0){
+            buff[len]='\0';
+            char* type="DIR"; // a file can only have one cwd and logically the current working directory is a directory
+            printf("%d\tcwd\t%s\t%s\n",pid,type,buff);
+        }
+        char exe[PATH_MAX]; //need to find the actual exe from which the file is running which we are calling txt for some reason due to the write up
+        snprintf(exe,PATH_MAX,"/proc/%d/exe",pid);
+        len=readlink(exe,buff,PATH_MAX-1);
+        if(len>0){
+            buff[len]='\0';
+            char* type="REG"; // an executable is a regular linux file just with +x permissions
+            printf("%d\ttxt\t%s\t%s\n",pid,type,buff);
+        }
+        char mem[PATH_MAX];
+        snprintf(mem,PATH_MAX,"/proc/%d/maps",pid);
+        FILE* mps=fopen(mem,"r"); //just an open since this is not an symlink, also this var is not useless unlike its namesake
+        if(mps){
+            char* seen[512]; //since seen mem address needs to be printed only once just gonna make an array of seen ones limited to 512 feels like i will oom as is
+            int num=0;
+            memset(seen, 0, sizeof(seen));
+            char line[9999];//should be fine, hope they don't stress test this, lets just put it at 10k
+            while(fgets(line,9999,mps)){
+                //printf("%s\n",line); //just debugging to see what this actually looks like gonna use the commented output to fix the fomatting 
+                /*PID     FD      TYPE    PATH
+                56404   cwd     DIR     /home/shura/Storage/IIIT/OSN/mp1/c-shell
+                56404   txt     REG     /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+                55b23015f000-55b230161000 r--p 00000000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b230161000-55b23016c000 r-xp 00002000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016c000-55b23016d000 r--p 0000d000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016d000-55b23016e000 r--p 0000d000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016e000-55b23016f000 rw-p 0000e000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b26f1d4000-55b26f1f6000 rw-p 00000000 00:00 0                          [heap]
+
+                7f7dd6800000-7f7dd6824000 r--p 00000000 103:05 789864                    /usr/lib/libc.so.6 */
+                char path[PATH_MAX]={0};
+                int pattern=sscanf(line,"%*s %*s %*s %*s %*s  %s",path); //%*s means to ignore and not read in sscanf you read till a space so ignore first 5 components which asa we can see if uuseless to us
+                if(pattern!=1||path[0]=='['||path[0]=='\0')//checking to see if scan successful and if we read a heap type or empty string
+                continue;
+                bool dup=false;
+                for(int i=0;i<num;i++){
+                    if(strcmp(seen[i],path)==0){
+                        dup=true;
+                        break;
+                    }
+                }
+                if(!dup){
+                    if(num<512)
+                    seen[num++]=strdup(path);
+                    printf("%d\tmem\tREG\t%s\n",pid,path);
+                }
+            }
+        }
+        char fd[PATH_MAX];
+        snprintf(fd,PATH_MAX,"/proc/%d/fd",pid);
+        DIR* d=opendir(fd); //need to be looking through the fd directories
+        if(d){
+            struct dirent *entry;
+            int fds[1024]; //just gonna limit to 1024 fds since i don't think any process will have more than that
+            int num=0;
+            while((entry=readdir(d))!=NULL){
+                if(entry->d_name[0]=='.')
+                continue;
+                char*end;
+                long fdn=strtol(entry->d_name,&end,10);
+                if(*end!='\0')
+                continue;
+                if(num<1024)
+                fds[num++]=(int)fdn;
+            }
+            closedir(d);
+            for(int i=0;i<num;i++){
+                int k=fds[i];
+                int b=i-1;
+                while(b>=0 && fds[b]>k){ //insetion sort to sort out the fds, did not want to write merge sort
+                    fds[b+1]=fds[b];
+                    b--;
+                }
+                fds[b+1]=k;
+            }
+            for(int i=0;i<num;i++){
+                char symlink[PATH_MAX+16];//since the fddir is a symlink it should not have that big of a file name//compiler says other wise going back to path max
+                snprintf(symlink,PATH_MAX+16,"%s/%d",fd,fds[i]);
+                len=readlink(symlink,buff,PATH_MAX-1);
+                if(len<0)
+                continue;
+                struct stat sta;
+                char *type="UNK"; //used for unknown
+                if(stat(symlink,&sta)==0){
+                    mode_t mode;
+                    mode=sta.st_mode;
+                    if(S_ISREG(mode))
+                    type="REG";
+                    else if(S_ISDIR(mode))
+                    type="DIR";
+                    else if(S_ISCHR(mode))
+                    type="CHR";
+                    else if(S_ISBLK(mode))
+                    type="BLK";
+                    else if(S_ISFIFO(mode))
+                    type="FIFO";
+                    else if(S_ISLNK(mode))
+                    type="LNK";
+                    else if(S_ISSOCK(mode))
+                    type="SOCK";
+                }
+                printf("%d\t%d\t%s\t%s\n",pid,fds[i],type,buff);   
+            }
+        }
+    }
+    else if(arg_index==2){
+        char*e;
+        long l=strtol(args[1],&e,10);
+        if(*e!='\0' || l<0){
+            printf("spy: invalid pid\n");
+            return;
+        }
+        pid_t pid=(pid_t)l;
+        if(kill(pid,0)<0){
+            if(errno==ESRCH){ //this extra check because from my previous deep dive on kill i know that the only time it will return an neg value is for either process not found or i do not have persmission to read
+                printf("spy: no such process\n");
+                return;
+            }
+        }
+        char* path;
+        path=calloc(PATH_MAX,sizeof(char));//not gonna risk the malloc garbage memory even tho no reason for that to happen here
+        snprintf(path,PATH_MAX,"/proc/%d",pid);
+        struct stat path_stat;
+        if(stat(path,&path_stat)<0){
+            printf("spy: no such process\n");
+            free(path);
+            return;
+        }
+        printf("PID\tFD\tTYPE\tPATH\n");
+        char cwd[PATH_MAX];
+        snprintf(cwd,PATH_MAX,"/proc/%d/cwd",pid);
+        ssize_t len;
+        char buff[PATH_MAX]={0};
+        len=readlink(cwd,buff,PATH_MAX-1); //since the values in the proc folder are symlinks can't be reading them normally
+        if(len>0){
+            buff[len]='\0';
+            char* type="DIR"; // a file can only have one cwd and logically the current working directory is a directory
+            printf("%d\tcwd\t%s\t%s\n",pid,type,buff);
+        }
+        char exe[PATH_MAX]; //need to find the actual exe from which the file is running which we are calling txt for some reason due to the write up
+        snprintf(exe,PATH_MAX,"/proc/%d/exe",pid);
+        len=readlink(exe,buff,PATH_MAX-1);
+        if(len>0){
+            buff[len]='\0';
+            char* type="REG"; // an executable is a regular linux file just with +x permissions
+            printf("%d\ttxt\t%s\t%s\n",pid,type,buff);
+        }
+        char mem[PATH_MAX];
+        snprintf(mem,PATH_MAX,"/proc/%d/maps",pid);
+        FILE* mps=fopen(mem,"r"); //just an open since this is not an symlink, also this var is not useless unlike its namesake
+        if(mps){
+            char* seen[512]; //since seen mem address needs to be printed only once just gonna make an array of seen ones limited to 512 feels like i will oom as is
+            int num=0;
+            char line[9999];//should be fine, hope they don't stress test this, lets just put it at 10k
+            while(fgets(line,9999,mps)){
+                //printf("%s\n",line); //just debugging to see what this actually looks like gonna use the commented output to fix the fomatting 
+                /*PID     FD      TYPE    PATH
+                56404   cwd     DIR     /home/shura/Storage/IIIT/OSN/mp1/c-shell
+                56404   txt     REG     /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+                55b23015f000-55b230161000 r--p 00000000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b230161000-55b23016c000 r-xp 00002000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016c000-55b23016d000 r--p 0000d000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016d000-55b23016e000 r--p 0000d000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b23016e000-55b23016f000 rw-p 0000e000 103:08 9963992                   /home/shura/Storage/IIIT/OSN/mp1/c-shell/shell.out
+
+                55b26f1d4000-55b26f1f6000 rw-p 00000000 00:00 0                          [heap]
+
+                7f7dd6800000-7f7dd6824000 r--p 00000000 103:05 789864                    /usr/lib/libc.so.6 */
+                char path[PATH_MAX]={0};
+                int pattern=sscanf(line,"%*s %*s %*s %*s %*s  %s",path); //%*s means to ignore and not read in sscanf you read till a space so ignore first 5 components which asa we can see if uuseless to us
+                if(pattern!=1||path[0]=='['||path[0]=='\0')//checking to see if scan successful and if we read a heap type or empty string
+                continue;
+                bool dup=false;
+                for(int i=0;i<num;i++){
+                    if(strcmp(seen[i],path)==0){
+                        dup=true;
+                        break;
+                    }
+                }
+                if(!dup){
+                    if(num<512)
+                    seen[num++]=strdup(path);
+                    printf("%d\tmem\tREG\t%s\n",pid,path);
+                }
+            }
+        }
+        char fd[PATH_MAX];
+        snprintf(fd,PATH_MAX,"/proc/%d/fd",pid);
+        DIR* d=opendir(fd); //need to be looking through the fd directories
+        if(d){
+            struct dirent *entry;
+            int fds[1024]; //just gonna limit to 1024 fds since i don't think any process will have more than that
+            int num=0;
+            while((entry=readdir(d))!=NULL){
+                if(entry->d_name[0]=='.')
+                continue;
+                char*end;
+                long fdn=strtol(entry->d_name,&end,10);
+                if(*end!='\0')
+                continue;
+                if(num<1024)
+                fds[num++]=(int)fdn;
+            }
+            closedir(d);
+            for(int i=0;i<num;i++){
+                int k=fds[i];
+                int b=i-1;
+                while(b>=0 && fds[b]>k){ //insetion sort to sort out the fds, did not want to write merge sort
+                    fds[b+1]=fds[b];
+                    b--;
+                }
+                fds[b+1]=k;
+            }
+            for(int i=0;i<num;i++){
+                char symlink[PATH_MAX+16];//since the fddir is a symlink it should not have that big of a file name
+                snprintf(symlink,PATH_MAX+16,"%s/%d",fd,fds[i]); // compiler keeps telling me that there can be a size diff of 11 so i just added 16 to path max should be fine now
+                len=readlink(symlink,buff,PATH_MAX-1);
+                if(len<0)
+                continue;
+                struct stat sta;
+                char *type="UNK"; //used for unknown
+                if(stat(symlink,&sta)==0){
+                    mode_t mode;
+                    mode=sta.st_mode;
+                    if(S_ISREG(mode))
+                    type="REG";
+                    else if(S_ISDIR(mode))
+                    type="DIR";
+                    else if(S_ISCHR(mode))
+                    type="CHR";
+                    else if(S_ISBLK(mode))
+                    type="BLK";
+                    else if(S_ISFIFO(mode))
+                    type="FIFO";
+                    else if(S_ISLNK(mode))
+                    type="LNK";
+                    else if(S_ISSOCK(mode))
+                    type="SOCK";
+                }
+                printf("%d\t%d\t%s\t%s\n",pid,fds[i],type,buff);   
+            }
+        }
+    }
+}
