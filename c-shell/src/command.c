@@ -279,7 +279,7 @@ void piped(node** coms,int start,int end,char*home,char* prev,bool back){
             signal(SIGTSTP,SIG_DFL);
             signal(SIGTTOU,SIG_DFL);
             if(back){
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){ 
                 //     dup2(devnull,STDIN_FILENO); 

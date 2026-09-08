@@ -164,8 +164,24 @@ void plant(int sig){ //since it will kill zombies, you know pvz reference
     int err_no=errno;
     int status=0;
     pid_t pid;
-    while((pid=waitpid(-1,&status,WNOHANG))>0){
-        if(wait_index<100){
+    while((pid=waitpid(-1,&status,WNOHANG|WUNTRACED|WCONTINUED))>0){ //fixed one thing found another issue trying to fix that now 
+        if(WIFSTOPPED(status)){
+            for(int i=0;i<bg_size;i++){
+                for(int j=0;j<bg_list[i].num;j++){
+                    if(bg_list[i].members[j]==pid)
+                    bg_list[i].sus=true;
+                }
+            }
+        }
+        else if( WIFCONTINUED(status)){
+            for(int i=0;i<bg_size;i++){
+                for(int j=0;j<bg_list[i].num;j++){
+                    if(bg_list[i].members[j]==pid)
+                    bg_list[i].sus=false;
+                }
+            }
+        }
+        else if(wait_index<100){
             wait_list[wait_index].pid=pid;
             wait_list[wait_index].stat=WIFEXITED(status) && WEXITSTATUS(status) == 0;
             wait_index++;
@@ -324,7 +340,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);// thought i found such a cool way to stop this, then dicussing with friends ends up this is not the implementation expected
+                signal(SIGTTIN,SIG_DFL);// thought i found such a cool way to stop this, then dicussing with friends ends up this is not the implementation expected
                 // int devnull=open("/dev/null",O_RDONLY); //basic opening the devnull then pointing the read end from fd 0 to devnull so that input is blocked to bg processes, i know its not needed in hop but is needed in others so better to just put everywhere
                 // if(devnull>=0){
                 //     dup2(devnull,STDIN_FILENO);
@@ -389,7 +405,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){
                 //     dup2(devnull,STDIN_FILENO);
@@ -610,7 +626,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){
                 //     dup2(devnull,STDIN_FILENO);
@@ -692,7 +708,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){ 
                 //     dup2(devnull,STDIN_FILENO); 
@@ -769,7 +785,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){ 
                 //     dup2(devnull,STDIN_FILENO); 
@@ -820,7 +836,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){ 
                 //     dup2(devnull,STDIN_FILENO); 
@@ -871,7 +887,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
             }
             if(need_redir){
                 pid_t pid2=fork();
@@ -910,7 +926,7 @@ void process_cmd(char* cmd){
                 signal(SIGINT,SIG_DFL);
                 signal(SIGTSTP,SIG_DFL);
                 signal(SIGTTOU,SIG_DFL);
-                signal(SIGTTIN,SIG_IGN);
+                signal(SIGTTIN,SIG_DFL);
                 // int devnull=open("/dev/null",O_RDONLY);
                 // if(devnull>=0){
                 //     dup2(devnull,STDIN_FILENO);

@@ -1052,3 +1052,69 @@ give me a look up table fuunction with all reasonably "common" syscalls, it shou
 
 ![alt text](image-22.png)
 ![alt text](image-23.png)
+
+### Prompt 9
+```
+ there is a issue i found initially there was this ❯ ./shell.out
+
+<shura@ANV1551:~>sleep 100 &
+
+[1] 155810
+
+<shura@ANV1551:~>cat | sort &
+
+[2] 155852
+
+<shura@ANV1551:~>activities
+
+cat with pid 155852 exited normally
+
+sort with pid 155853 exited normally
+
+[1] pgid 155810
+
+155810 sleep  Running
+
+<shura@ANV1551:~>
+
+the required output was
+
+<goatam@iiit:~> sleep 100 &
+
+[1] 4021
+
+<goatam@iiit:~> cat | sort &
+
+[2] 4030
+
+<goatam@iiit:~> activities
+
+[1] pgid 4021
+
+4021 sleep  Running
+
+[2] pgid 4030
+
+4030 cat    Stopped
+
+4031 sort   Stopped
+
+so i changed the pointing read end to dev/null but that is fucked and it gives me this output now
+
+<shura@ANV1551:~>cat | sort &
+
+[1] 6065
+
+<shura@ANV1551:~>cat: -: Input/output error
+
+cat with pid 6065 exited abnormally
+
+sort with pid 6066 exited normally
+
+<shura@ANV1551:~>
+
+so like now how do i solve this 
+```
+
+![alt text](image-24.png)
+![alt text](image-25.png)
