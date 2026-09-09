@@ -66,7 +66,7 @@ char* lookup(long num){
         case 334: return "rseq";
         default: 
         char* unknown=malloc(20*sizeof(char));
-        snprintf(unknown,20,"unknown(%ld)",num);
+        snprintf(unknown,20,"syscall_%ld",num);
         return unknown;
     }
 }
@@ -913,6 +913,12 @@ void ping(char** args,int arg_index){
         printf("ping: invalid syntax\n");
         return;
     }
+    char *endi;
+    long sig=strtol(args[2],&endi,10);
+    if(*endi!=0 ||sig<0){
+        printf("ping: invalid syntax\n");
+        return;
+    }
     if(args[1][0]=='%'){
         char* end;
         long long job_num=strtol(args[1]+1,&end,10);
@@ -937,6 +943,7 @@ void ping(char** args,int arg_index){
             printf("ping: invalid syntax\n");
             return;
         }
+        killpg(bg_list[job].pgid,signal_num%64);
         printf("Sent signal %lld to %%%lld\n",signal_num,job_num);
     }
     else{
@@ -963,6 +970,7 @@ void ping(char** args,int arg_index){
             printf("ping: invalid syntax\n");
             return;
         }
+        kill((pid_t)pid,signal_num%64);
         printf("Sent signal %lld to %lld\n",signal_num,pid);
     }
 }
@@ -1252,6 +1260,11 @@ void spy(char** args,int arg_index){
         }
     }
 }
+volatile sig_atomic_t snoop_stop=0;
+void snoop_sigint(int sig){
+    (void)sig;
+    snoop_stop=1;
+}
 void snoop(char** args,int arg_index){
     pid_t pid;
     if(arg_index>=3 && strcmp(args[1],"-p")==0){
@@ -1275,6 +1288,7 @@ void snoop(char** args,int arg_index){
         }
         int status;
         waitpid(pid,&status,0);
+        kill(pid,SIGCONT); //attach ptrace to a stopped process and it will keep hanging need to make my function start it again so it works as resume too
     }
     else if(arg_index>=2){
         pid=fork();
@@ -1302,6 +1316,13 @@ void snoop(char** args,int arg_index){
     struct timespec entry_time;
     long order=0;
     long pending=0;
+    snoop_stop=0;
+    struct sigaction old_sa;
+    struct sigaction sa={0};
+    sa.sa_handler=snoop_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags=0;
+    sigaction(SIGINT,&sa,&old_sa);
     while(true){
         if(ptrace(PTRACE_SYSCALL,pid,NULL,(void*)pending)<0) //making sure there are no pending syscalls if there are this tally part is not gonna run and it will wait for a signal till the syscall is done then it will continue
         break;
@@ -1351,6 +1372,7 @@ void snoop(char** args,int arg_index){
             in_syscall=false;
         }
     }
+    sigaction(SIGINT,&old_sa,NULL);
     for(int i=0;i<num;i++){
         syscalls k=info[i];
         int j=i-1;
