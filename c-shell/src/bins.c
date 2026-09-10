@@ -1382,8 +1382,8 @@ void snoop(char** args,int arg_index){
         }
         info[j+1]=k;
     }
-    printf("syscall\t\tcalls\ttime\n");
+    fprintf(stderr,"syscall\t\tcalls\ttime\n");
     for(int i=0;i<num;i++){
-        printf("%s\t\t%ld\t%.6f\n",lookup(info[i].num),info[i].calls,info[i].tt);
+        fprintf(stderr,"%s\t\t%ld\t%.6f\n",lookup(info[i].num),info[i].calls,info[i].tt);
     }
 }
