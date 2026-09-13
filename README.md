@@ -4,10 +4,30 @@
 This repository contains the complete implementation for Mini Project 1, divided into two major components: a custom POSIX-compliant C-Shell and a Multi-Level Feedback Queue (MLFQ) scheduler integrated into the xv6 operating system kernel. 
 
 The codebase is heavily modularized into separate header and source files to ensure clean logic separation and avoid monolithic structures.
+## How to Run
+
+**C-Shell**
+```
+cd c-shell
+make clean
+make all
+./shell.out
+```
+
+**xv6 (MLFQ scheduler)**
+```
+cd xv6
+make clean
+make qemu SCHEDULER=MLFQ
+```
+
 ## Assumptions
-1. Background execution is set up such that when we get the output result, it will not print out directly and mess up the terminal. It waits patiently like in bash, and will only announce that the process has ended after the code put in the current prompt is done running or if you just hit enter.
+1. Background execution is set up such that when we get the output result, it will not print out directly and mess up the terminal. It waits patiently like in bash, and will only announce that the process has ended after the code put in the current prompt is done running or if you just hit enter. Concretely, `no_longer_waiting()` (which flushes queued exit announcements) is only called right before a fresh prompt is drawn/read and right after a foreground command finishes — never asynchronously while the shell is just sitting idle at the prompt waiting on `fgets`. This mirrors bash: a background job that finishes while you're idle at the prompt is only reported once you press Enter (even on an empty line), not the instant it exits.
 2. Custom built-in commands will not be run with snoop.
-3. For xv6, instead of implementing an actual queue data structure, I used modulo rotating pointers to manage the processes.
+3. Following on from (2): since `snoop` (ptrace-based tracing) and terminal-control signals (Ctrl-C/Ctrl-Z) only make sense against a distinct process, they are assumed to not meaningfully work on the shell's own custom intrinsics (`hop`, `reveal`, `peek`, `locate`, `activities`, `resume`, `ping`, `spy`) when those are run in the foreground with no redirection and not backgrounded. In that case they execute as plain function calls inside the shell's own process, sharing its pid/pgid, rather than as a separate binary/process group. Since the shell itself must never be killed or stopped by `SIGINT`/`SIGTSTP`/`SIGTTOU` (per E2), those signals simply have no effect while such a builtin is running. A builtin only gets its own forked, stoppable/traceable process group once it's combined with file redirection or run in the background.
+4. Only `hop`, `reveal`, `peek`, and `locate` are treated as "true" builtins runnable as a stage inside a pipeline (see `builtin()`/`exec_builtin()`); the exotic intrinsics (`activities`, `resume`, `ping`, `spy`, `snoop`) are assumed to only be meaningful as a standalone foreground/background command and are not supported as one stage of a `|` pipeline.
+5. The frecency database is stored as a flat text file named `.frerency` in the shell's home directory, capped at 100 entries; once full, the lowest-ranked entry is evicted to make room for a newly visited directory. Scoring and decay are computed deterministically from stored frequency (`score`) and a recency-weighted timestamp, as allowed by the spec.
+6. For xv6, instead of implementing an actual queue data structure, I used modulo rotating pointers to manage the processes.
 
 ***
 
